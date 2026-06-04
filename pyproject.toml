@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "el-shaddai-diagnostics"
+version = "1.5.1"
+description = "Transparent El Shaddai health diagnostics"
+requires-python = ">=3.10"
+
+[project.optional-dependencies]
+data = [
+  "yfinance",
+  "pandas",
+  "requests",
+]
+
+[tool.setuptools.packages.find]
+include = ["el_shaddai*"]

@@ -1,0 +1,9 @@
+asset,price_score,role_score,el_shaddai_score,label,main_reason,data_date
+VT,93.04,N/A,93.04,Spot Buy Candidate,RSI=0.0; 200DMA deviation=-16.9%; 52w range position=0.0,2026-06-03
+BNDX,90.25,50.00,50.00,Neutral,RSI=0.0; 200DMA deviation=-12.3%; 52w range position=0.0; role: dxy [core] proxy=+0.00 => 50.0; us_10y_yield [core] proxy=+0.00 => 50.0,2026-06-03
+TLT,62.43,50.00,50.00,Neutral,RSI=100.0; 200DMA deviation=-4.9%; 52w range position=7.4; role: recession_pressure [core] proxy=+0.00 => 50.0; us_10y_yield [support] proxy=+0.00 => 50.0,2026-06-03
+TIP,36.50,50.00,36.50,Weak,RSI=100.0; 200DMA deviation=1.5%; 52w range position=55.6; role: inflation_threat [core] proxy=+0.00 => 50.0; inflation_expectation_gap [core] proxy=+0.00 => 50.0,2026-06-03
+XLRE,36.31,50.00,36.31,Weak,RSI=33.4; 200DMA deviation=3.8%; 52w range position=95.6; role: reit_trend [core] proxy=+0.00 => 50.0; interest_rate_pressure [core] proxy=+0.00 => 50.0,2026-06-03
+GLDM,46.03,50.00,46.03,Neutral,RSI=0.0; 200DMA deviation=2.2%; 52w range position=77.6; role: safe_haven_pressure [core] proxy=+0.00 => 50.0; real_rate [context] proxy=+0.00 => 50.0,2026-06-03
+DBC,53.13,50.00,50.00,Neutral,RSI=0.0; 200DMA deviation=0.3%; 52w range position=65.3; role: crb [core] proxy=+0.00 => 50.0; gsci [core] proxy=+0.00 => 50.0,2026-06-03
+BTC,27.80,N/A,27.80,Not Attractive,RSI=100.0; 200DMA deviation=1.3%; 52w range position=75.1,2026-06-03
