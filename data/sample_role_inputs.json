@@ -1,0 +1,53 @@
+{
+  "BNDX": {
+    "dxy": 0.0,
+    "us_10y_yield": 0.0,
+    "global_bond_trend": 0.0,
+    "fx_environment": 0.0
+  },
+  "TLT": {
+    "recession_pressure": 0.0,
+    "us_10y_yield": 0.0,
+    "us_30y_yield": 0.0,
+    "yield_curve": 0.0,
+    "real_rate": 0.0,
+    "debt_sustainability": 0.0,
+    "interest_burden": 0.0,
+    "foreign_demand": 0.0
+  },
+  "TIP": {
+    "inflation_threat": 0.0,
+    "inflation_expectation_gap": 0.0,
+    "purchasing_power_protection": 0.0,
+    "stagflation_pressure": 0.0,
+    "inflation_regime_strength": 0.0,
+    "real_rate_shock": 0.0,
+    "deflation_pressure": 0.0,
+    "macro_submission": 0.0
+  },
+  "XLRE": {
+    "reit_trend": 0.0,
+    "interest_rate_pressure": 0.0,
+    "sector_relative_strength": 0.0
+  },
+  "GLDM": {
+    "safe_haven_pressure": 0.0,
+    "real_rate": 0.0,
+    "dxy": 0.0,
+    "central_bank_buying": 0.0,
+    "geopolitical_risk": 0.0,
+    "inflation_regime": 0.0,
+    "currency_hedge": 0.0,
+    "liquidity_regime": 0.0,
+    "macro_independence": 0.0,
+    "dominant_anchor_strength": 0.0
+  },
+  "DBC": {
+    "crb": 0.0,
+    "gsci": 0.0,
+    "bcom": 0.0,
+    "oil": 0.0,
+    "metals": 0.0,
+    "agriculture": 0.0
+  }
+}
