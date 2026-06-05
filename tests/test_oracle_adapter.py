@@ -1,0 +1,150 @@
+from pathlib import Path
+
+from el_shaddai import cli
+from el_shaddai.oracle_adapter import compute_oracle_asset, oracle_inputs_from_csv
+from el_shaddai.report import write_csv, write_markdown
+from el_shaddai.scoring import score_all
+
+
+def test_manual_csv_route_generates_vt_opportunity_score():
+    result = oracle_inputs_from_csv("data/sample_oracle_inputs.csv")
+
+    assert result.used_oracle is True
+    assert result.assets["VT"].opportunity_score > 0
+    assert result.assets["VT"].oracle_signal in {"神は云っている、ここで買う定めなのだと……", "近い。備えよ", "まだその時ではない", "高値圏。待て", "慢心の極み"}
+
+
+def test_manual_csv_route_generates_btc_opportunity_score():
+    result = oracle_inputs_from_csv("data/sample_oracle_inputs.csv")
+
+    assert result.used_oracle is True
+    assert result.assets["BTC"].opportunity_score > 0
+    assert result.assets["BTC"].oracle_signal == "神は云っている、ここで買う定めなのだと……"
+
+
+def test_vt_stress_and_cheap_valuation_maps_to_oracle_buy():
+    row = {
+        "date": "2026-01-01",
+        "asset": "VT",
+        "cape": "12",
+        "market_cap_gdp": "70",
+        "earnings_yield": "8",
+        "equity_risk_premium": "6",
+        "fear_greed": "10",
+        "vix": "45",
+        "put_call": "1.4",
+        "rsi": "25",
+        "dma_200_deviation": "-0.30",
+        "range_52w_position": "0",
+        "drawdown_from_ath": "-0.45",
+    }
+
+    result = compute_oracle_asset("VT", row, "test")
+
+    assert result.opportunity_score >= 80
+    assert result.oracle_signal == "神は云っている、ここで買う定めなのだと……"
+
+
+def test_btc_low_onchain_and_200wma_proximity_maps_to_oracle_buy():
+    row = {
+        "date": "2026-01-01",
+        "asset": "BTC",
+        "mvrv_z": "0",
+        "puell_multiple": "0.4",
+        "reserve_risk": "0.001",
+        "rhodl_ratio": "500",
+        "yardstick": "0",
+        "crypto_fear_greed": "10",
+        "funding_rate": "-0.02",
+        "rsi": "25",
+        "dma_200_deviation": "-0.55",
+        "dma_200w_deviation": "0.0",
+        "range_52w_position": "0",
+        "drawdown_from_ath": "-0.85",
+        "days_since_halving": "150",
+        "distance_from_previous_cycle_high": "0.0",
+        "bitcoin_dominance": "35",
+    }
+
+    result = compute_oracle_asset("BTC", row, "test")
+
+    assert result.opportunity_score >= 80
+    assert result.oracle_signal == "神は云っている、ここで買う定めなのだと……"
+
+
+def test_btc_euphoric_ath_conditions_map_to_euphoria_risk():
+    row = {
+        "date": "2026-01-01",
+        "asset": "BTC",
+        "mvrv_z": "7",
+        "puell_multiple": "4",
+        "reserve_risk": "0.02",
+        "rhodl_ratio": "50000",
+        "yardstick": "4",
+        "crypto_fear_greed": "95",
+        "funding_rate": "0.08",
+        "rsi": "80",
+        "dma_200_deviation": "1.2",
+        "dma_200w_deviation": "1.5",
+        "range_52w_position": "100",
+        "drawdown_from_ath": "0",
+        "days_since_halving": "1100",
+        "distance_from_previous_cycle_high": "1.0",
+        "bitcoin_dominance": "65",
+    }
+
+    result = compute_oracle_asset("BTC", row, "test")
+
+    assert result.opportunity_score < 20
+    assert result.oracle_signal == "慢心の極み"
+
+
+def test_insufficient_oracle_inputs_fall_back_to_existing_price_score(tmp_path: Path):
+    csv_path = tmp_path / "oracle_empty.csv"
+    csv_path.write_text("date,asset,cape,mvrv_z\n2026-01-01,VT,,\n2026-01-01,BTC,,\n", encoding="utf-8")
+
+    assert cli.main(["--use-oracle", "--oracle-inputs-csv", str(csv_path), "--output-dir", str(tmp_path)]) == 0
+    rows = (tmp_path / "el_shaddai_scores.csv").read_text(encoding="utf-8").splitlines()
+    vt = next(row for row in rows if row.startswith("VT,"))
+    btc = next(row for row in rows if row.startswith("BTC,"))
+
+    assert vt.endswith(",,,")
+    assert btc.endswith(",,,")
+    assert "Spot Buy Candidate" in vt or "Watch" in vt or "Neutral" in vt or "Not Attractive" in vt or "Avoid Spot Buy" in vt
+
+
+def test_csv_includes_oracle_columns(tmp_path: Path):
+    oracle = oracle_inputs_from_csv("data/sample_oracle_inputs.csv")
+    prices = {asset: [100 - i * 0.1 for i in range(260)] for asset in ["VT", "BNDX", "TLT", "TIP", "XLRE", "GLDM", "DBC", "BTC"]}
+    scores = score_all(prices, {}, "2026-01-01", oracle_results=oracle.assets)
+    path = write_csv(scores, tmp_path)
+    text = path.read_text(encoding="utf-8")
+
+    assert "opportunity_score,oracle_signal,oracle_reason" in text.splitlines()[0]
+    assert "神は云っている、ここで買う定めなのだと……" in text
+
+
+def test_markdown_includes_vt_btc_oracle_sections(tmp_path: Path):
+    oracle = oracle_inputs_from_csv("data/sample_oracle_inputs.csv")
+    prices = {asset: [100 - i * 0.1 for i in range(260)] for asset in ["VT", "BNDX", "TLT", "TIP", "XLRE", "GLDM", "DBC", "BTC"]}
+    scores = score_all(prices, {}, "2026-01-01", oracle_results=oracle.assets)
+    path = write_markdown(scores, tmp_path, "test", oracle_result=oracle)
+    text = path.read_text(encoding="utf-8")
+
+    assert "## VT Opportunity generated by O.R.A.C.L.E." in text
+    assert "## BTC Opportunity generated by O.R.A.C.L.E." in text
+    assert "opportunity_score:" in text
+    assert "oracle_signal:" in text
+
+
+def test_vt_btc_still_have_no_role_score_when_oracle_is_used():
+    oracle = oracle_inputs_from_csv("data/sample_oracle_inputs.csv")
+    prices = {asset: [100 - i * 0.1 for i in range(260)] for asset in ["VT", "BNDX", "TLT", "TIP", "XLRE", "GLDM", "DBC", "BTC"]}
+    scores = score_all(prices, {}, "2026-01-01", oracle_results=oracle.assets)
+
+    vt = next(score for score in scores if score.asset == "VT")
+    btc = next(score for score in scores if score.asset == "BTC")
+    assert vt.role_score is None
+    assert btc.role_score is None
+    assert vt.el_shaddai_score == oracle.assets["VT"].opportunity_score
+    assert btc.el_shaddai_score == oracle.assets["BTC"].opportunity_score
