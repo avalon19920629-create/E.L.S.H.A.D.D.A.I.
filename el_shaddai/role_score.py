@@ -102,6 +102,24 @@ def _structured_score(asset: str, components: Mapping[str, float], weights: Mapp
             adjusted = min(adjusted, 35.0)
             caps.append("TIP full penalty cap: all three risk penalties severe capped Role Score at 35")
 
+    if asset == "XLRE":
+        real_rate_severe = components.get("real_rate_shock", 50.0) <= 25.0
+        credit_severe = components.get("credit_stress", 50.0) <= 25.0
+        equity_severe = components.get("equity_submission", 50.0) <= 25.0
+        dollar_severe = components.get("dollar_headwind", 50.0) <= 25.0
+        if real_rate_severe:
+            adjusted = min(adjusted, 55.0)
+            caps.append("XLRE real-rate shock cap: severe real_rate_shock capped Role Score at 55")
+        if real_rate_severe and credit_severe:
+            adjusted = min(adjusted, 45.0)
+            caps.append("XLRE rates + credit cap: severe real_rate_shock and credit_stress capped Role Score at 45")
+        if real_rate_severe and credit_severe and equity_severe:
+            adjusted = min(adjusted, 35.0)
+            caps.append("XLRE full role-failure cap: severe real_rate_shock, credit_stress, and equity_submission capped Role Score at 35")
+        if dollar_severe and credit_severe:
+            adjusted = min(adjusted, 50.0)
+            caps.append("XLRE dollar + credit cap: severe dollar_headwind and credit_stress capped Role Score at 50")
+
     interpretation = f"raw_weighted={raw:.2f}; structured core/support/context/penalty aggregation applied for {asset}."
     if caps:
         interpretation += " Caps applied: " + " | ".join(caps)
