@@ -1,4 +1,4 @@
-"""Configuration for El Shaddai v1.7.
+"""Configuration for El Shaddai v1.8.
 
 The defaults intentionally favor transparency over sophistication.  Every score
 is derived from bounded, inspectable components and can be audited from the
@@ -24,7 +24,7 @@ PRICE_COMPONENT_WEIGHTS: Mapping[str, float] = {
 }
 
 ROLE_COMPONENT_WEIGHTS: Mapping[str, Mapping[str, float]] = {
-    "BNDX": {"dxy": 0.25, "us_10y_yield": 0.25, "global_bond_trend": 0.30, "fx_environment": 0.20},
+    "BNDX": {"sovereign_trust": 0.25, "currency_order": 0.25, "liquidity_flow": 0.25, "diversification_integrity": 0.25, "fx_hedge_value": 0.34, "global_bond_trend": 0.33, "sovereign_stability": 0.33, "hedge_cost_pressure": 0.34, "global_credit_stress": 0.33, "sovereign_stress": 0.33},
     "TLT": {"recession_pressure": 0.20, "us_10y_yield": 0.10, "us_30y_yield": 0.10, "yield_curve": 0.15, "real_rate": 0.15, "debt_sustainability": 0.10, "interest_burden": 0.10, "foreign_demand": 0.10},
     "TIP": {"inflation_threat": 0.18, "inflation_expectation_gap": 0.18, "purchasing_power_protection": 0.18, "stagflation_pressure": 0.11, "inflation_regime_strength": 0.11, "real_rate_shock": 0.08, "deflation_pressure": 0.08, "macro_submission": 0.08},
     "GLDM": {"safe_haven_pressure": 0.15, "real_rate": 0.10, "dxy": 0.10, "central_bank_buying": 0.10, "geopolitical_risk": 0.10, "inflation_regime": 0.10, "currency_hedge": 0.10, "liquidity_regime": 0.10, "macro_independence": 0.10, "dominant_anchor_strength": 0.05},
@@ -34,7 +34,7 @@ ROLE_COMPONENT_WEIGHTS: Mapping[str, Mapping[str, float]] = {
 
 
 ROLE_COMPONENT_GROUPS: Mapping[str, Mapping[str, str]] = {
-    "BNDX": {"dxy": "core", "us_10y_yield": "core", "global_bond_trend": "core", "fx_environment": "core"},
+    "BNDX": {"sovereign_trust": "core", "currency_order": "core", "liquidity_flow": "core", "diversification_integrity": "core", "fx_hedge_value": "support", "global_bond_trend": "support", "sovereign_stability": "support", "hedge_cost_pressure": "risk_penalty", "global_credit_stress": "risk_penalty", "sovereign_stress": "risk_penalty"},
     "TLT": {
         "recession_pressure": "core",
         "yield_curve": "core",
@@ -63,6 +63,7 @@ ROLE_COMPONENT_GROUPS: Mapping[str, Mapping[str, str]] = {
 }
 
 ROLE_GROUP_WEIGHTS: Mapping[str, Mapping[str, float]] = {
+    "BNDX": {"core": 0.70, "support": 0.20, "risk_penalty": 0.10},
     "TLT": {"core": 0.60, "support": 0.25, "risk_penalty": 0.15},
     "GLDM": {"core": 0.75, "support": 0.20, "context": 0.05},
     "TIP": {"core": 0.60, "support": 0.20, "risk_penalty": 0.20},
@@ -73,7 +74,7 @@ ROLE_GROUP_WEIGHTS: Mapping[str, Mapping[str, float]] = {
 # All values are deliberately simple: positive numbers mean the role backdrop is
 # helpful, negative numbers mean impaired, and zero is neutral.
 DEFAULT_ROLE_INPUTS: Mapping[str, Mapping[str, float]] = {
-    "BNDX": {"dxy": 0.0, "us_10y_yield": 0.0, "global_bond_trend": 0.0, "fx_environment": 0.0},
+    "BNDX": {"sovereign_trust": 0.0, "currency_order": 0.0, "liquidity_flow": 0.0, "diversification_integrity": 0.0, "fx_hedge_value": 0.0, "global_bond_trend": 0.0, "sovereign_stability": 0.0, "hedge_cost_pressure": 0.0, "global_credit_stress": 0.0, "sovereign_stress": 0.0},
     "TLT": {"recession_pressure": 0.0, "us_10y_yield": 0.0, "us_30y_yield": 0.0, "yield_curve": 0.0, "real_rate": 0.0, "debt_sustainability": 0.0, "interest_burden": 0.0, "foreign_demand": 0.0},
     "TIP": {"inflation_threat": 0.0, "inflation_expectation_gap": 0.0, "purchasing_power_protection": 0.0, "stagflation_pressure": 0.0, "inflation_regime_strength": 0.0, "real_rate_shock": 0.0, "deflation_pressure": 0.0, "macro_submission": 0.0},
     "GLDM": {"safe_haven_pressure": 0.0, "real_rate": 0.0, "dxy": 0.0, "central_bank_buying": 0.0, "geopolitical_risk": 0.0, "inflation_regime": 0.0, "currency_hedge": 0.0, "liquidity_regime": 0.0, "macro_independence": 0.0, "dominant_anchor_strength": 0.0},
