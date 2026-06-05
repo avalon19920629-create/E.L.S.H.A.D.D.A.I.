@@ -72,6 +72,30 @@ def _structured_score(asset: str, components: Mapping[str, float], weights: Mapp
             used_group_weight += group_weight
     adjusted = structured / used_group_weight if used_group_weight else raw
 
+    if asset == "BNDX":
+        pillar_names = ["sovereign_trust", "currency_order", "liquidity_flow", "diversification_integrity"]
+        failed = [name for name in pillar_names if components.get(name, 50.0) <= 25.0]
+        failed_set = set(failed)
+        if len(failed) >= 4:
+            adjusted = min(adjusted, 0.0)
+            caps.append("Atlas four-pillar failure cap: Role Score capped at 0")
+        elif len(failed) == 3:
+            adjusted = min(adjusted, 20.0)
+            caps.append("Atlas three-pillar failure cap: Role Score capped at 20")
+        elif len(failed) == 2:
+            adjacent_pairs = [
+                {"sovereign_trust", "currency_order"},
+                {"currency_order", "liquidity_flow"},
+                {"liquidity_flow", "diversification_integrity"},
+                {"diversification_integrity", "sovereign_trust"},
+            ]
+            if any(failed_set == pair for pair in adjacent_pairs):
+                adjusted = min(adjusted, 35.0)
+                caps.append("Atlas adjacent-pillar failure cap: Role Score capped at 35")
+            else:
+                adjusted = min(adjusted, 50.0)
+                caps.append("Atlas diagonal-pillar failure cap: Role Score capped at 50")
+
     if asset == "TLT" and penalty is not None:
         penalty_components = [value for name, value in components.items() if groups.get(name) == "risk_penalty"]
         severe_penalty_count = sum(1 for value in penalty_components if value <= 25.0)
@@ -120,7 +144,35 @@ def _structured_score(asset: str, components: Mapping[str, float], weights: Mapp
             adjusted = min(adjusted, 50.0)
             caps.append("XLRE dollar + credit cap: severe dollar_headwind and credit_stress capped Role Score at 50")
 
-    interpretation = f"raw_weighted={raw:.2f}; structured core/support/context/penalty aggregation applied for {asset}."
+    if asset == "BNDX":
+        pillar_names = ["sovereign_trust", "currency_order", "liquidity_flow", "diversification_integrity"]
+        failed = [name for name in pillar_names if components.get(name, 50.0) <= 25.0]
+        failed_set = set(failed)
+        if len(failed) >= 3:
+            atlas_status = "Atlas Fallen"
+            atlas_message = "The sovereign-credit structure is no longer reliable."
+        elif len(failed) == 2:
+            adjacent_pairs = [
+                {"sovereign_trust", "currency_order"},
+                {"currency_order", "liquidity_flow"},
+                {"liquidity_flow", "diversification_integrity"},
+                {"diversification_integrity", "sovereign_trust"},
+            ]
+            if any(failed_set == pair for pair in adjacent_pairs):
+                atlas_status = "Atlas Cannot Hold"
+                atlas_message = "Adjacent pillar collapse detected. Blanket integrity compromised."
+            else:
+                atlas_status = "Atlas Kneeling"
+                atlas_message = "Structural stress detected. Winter protection reduced."
+        elif len(failed) == 1:
+            atlas_status = "Atlas Strained"
+            atlas_message = "One pillar weakened. Monitor carefully."
+        else:
+            atlas_status = "Atlas Standing"
+            atlas_message = "Winter blanket remains intact."
+        interpretation = f"{atlas_status}: {atlas_message} Failed pillars: {', '.join(failed) if failed else 'none'}."
+    else:
+        interpretation = f"raw_weighted={raw:.2f}; structured core/support/context/penalty aggregation applied for {asset}."
     if caps:
         interpretation += " Caps applied: " + " | ".join(caps)
     return adjusted, core, support, penalty, caps, interpretation
