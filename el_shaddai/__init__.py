@@ -1,3 +1,3 @@
 """El Shaddai health diagnostics for non-momentum assets."""
 
-__version__ = "1.6"
+__version__ = "1.7"

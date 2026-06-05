@@ -1,4 +1,4 @@
-"""Configuration for El Shaddai v1.6.
+"""Configuration for El Shaddai v1.7.
 
 The defaults intentionally favor transparency over sophistication.  Every score
 is derived from bounded, inspectable components and can be audited from the
