@@ -1,0 +1,58 @@
+"""El Shaddai v2.0 日本語統合監査レポート。"""
+
+from __future__ import annotations
+
+from typing import Any, Mapping
+
+REQUIRED_SECTIONS = (
+    "総合診断", "要約", "今回推奨する行動", "今回推奨しない行動", "八騎士 健全度順位", "負傷アセット",
+    "役割グループ診断", "市場文脈", "相関構造診断", "次回監査で確認すること", "最終メッセージ",
+)
+
+
+def _bullets(items: list[str]) -> list[str]:
+    return [f"・{item}" for item in items] or ["・該当なし"]
+
+
+def render_integrated_report(result: Mapping[str, Any]) -> str:
+    """構造化監査結果を、日本語の運用監査報告書として描画する。"""
+    lines = ["=" * 60, "EL SHADDAI 統合監査報告書 v2.0", "=" * 60, "", "【総合診断】"]
+    lines += [
+        f"聖域健全度スコア：{result['sanctuary_health_score']:.1f} / 100",
+        f"総合診断：{result['global_judgment_label']}",
+        f"推奨運用判断：{result['action_label']}（助言のみ・自動売買なし）",
+    ]
+    if result.get("hysteresis_note"): lines.append(f"継続判定：{result['hysteresis_note']}")
+
+    wounded = len(result["wounded_assets"])
+    summary = [
+        f"L.U.M.U.S.-8の役割健全性を監査し、負傷アセットは{wounded}件と判定した。",
+        "低スコアは自動売却を意味しない。固定比率と既存の乖離ルールを優先する。",
+    ]
+    lines += ["", "【要約】", *summary, "", "【今回推奨する行動】", *_bullets(result["recommended_actions"])]
+    lines += ["", "【今回推奨しない行動】", *_bullets(result["not_recommended_actions"])]
+
+    lines += ["", "【八騎士 健全度順位】"]
+    for index, asset in enumerate(result["asset_health_rank"], 1):
+        lines.append(f"{index}. {asset['asset']} / {asset['audit_engine']}：{asset['asset_health_score']:.1f} / {asset['health_label']} / {asset['wound_label']}")
+
+    lines += ["", "【負傷アセット】"]
+    if not result["wounded_assets"]:
+        lines.append("・明確な負傷アセットなし。価格変動だけでは役割負傷と判定しない。")
+    else:
+        for asset in result["wounded_assets"]:
+            lines.append(f"・{asset['asset']}：{asset['wound_label']} / {asset['diagnosis_summary'] or '継続監査対象'}")
+
+    lines += ["", "【役割グループ診断】"]
+    for group, diagnosis in result["role_group_diagnosis"].items():
+        lines.append(f"・{group}：{diagnosis['label']}（平均 {diagnosis['score']:.1f}）")
+
+    context = result["market_context"]
+    lines += ["", "【市場文脈】", context["market_context_summary"]]
+    lines += _bullets([f"文脈フラグ: {flag}" for flag in context["market_context_flags"]])
+    lines += ["Market Amedas単独では売却・配分変更を正当化しない。"]
+
+    lines += ["", "【相関構造診断】", result["correlation_diagnosis"]]
+    lines += ["", "【次回監査で確認すること】", *_bullets(result["next_checkpoints"])]
+    lines += ["", "【最終メッセージ】", "市場の空を確認し、装備の役割を点検する。空模様だけで装備を捨てない。"]
+    return "\n".join(lines) + "\n"

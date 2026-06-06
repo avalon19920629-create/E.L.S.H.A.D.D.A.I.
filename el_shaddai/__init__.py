@@ -1,3 +1,3 @@
-"""El Shaddai health diagnostics for non-momentum assets."""
+"""El Shaddai の透明な役割健全性診断。"""
 
-__version__ = "1.9"
+__version__ = "2.0"

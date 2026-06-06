@@ -1,8 +1,8 @@
-# El Shaddai 健全度診断システム v1.8
+# El Shaddai 健全度診断システム v2.0
 
-El Shaddai は、三体戦略における監査対象資産を **Permanent Holdings / Value Opportunity Only** と **Role-Audited Assets** に分け、説明可能性を優先して診断する v1.8 初期版です。売買予測やブラックボックスの機械学習モデルではなく、スポット買い好機、資産の役割健全性、元気玉（追加投資資金）の投入先候補を人間が監査できる形で提示します。
+El Shaddai は、三体戦略における監査対象資産を **Permanent Holdings / Value Opportunity Only** と **Role-Audited Assets** に分け、説明可能性を優先して診断する監査システムです。v2.0 では既存の資産別監査に L.U.M.U.S.-8 統合監査層を追加し、役割健全性と助言専用の運用判断を日本語で提示します。売買予測やブラックボックスの機械学習、自動売買は行いません。
 
-v1.8 は「実運用完成版」ではなく、透明性・説明可能性・監査可能性・将来拡張性を優先した器です。
+v2.0 は「実運用完成版」ではなく、透明性・説明可能性・監査可能性・将来拡張性を優先した器です。
 
 ## 対象アセットの分類
 
@@ -639,3 +639,15 @@ G.A.I.A. reports one of these interpretations:
 - **Gaia Dormant** — Commodity role is neutral or inactive.
 - **Gaia Choked** — Dollar/deflation/growth collapse suppresses commodity role.
 - **Gaia Extinguished** — Commodity regime is structurally impaired.
+
+## El Shaddai 統合監査層 v2.0
+
+v2.0 の統合監査層は、L.U.M.U.S.-8 の8資産監査結果を `AssetAuditInput` に正規化し、役割健全度順位、負傷アセット、役割グループ診断、聖域健全度、総合診断、助言専用の運用判断をまとめます。低スコアを自動売却へ変換せず、Market Amedas は弱い市場文脈としてのみ利用します。補正候補には継続判定（ヒステリシス）を適用し、自動売買は実装しません。
+
+日本語のサンプル統合監査報告書は次のコマンドで生成できます。
+
+```bash
+python -m el_shaddai.integrated_audit --demo
+```
+
+報告書は標準出力に表示され、`artifacts/demo/el_shaddai_integrated_audit_report.md` にも保存されます。Python からは `run_integrated_audit(asset_audits, portfolio, market_amedas=None)` を呼び出すと、構造化された辞書と `report_text` を取得できます。
