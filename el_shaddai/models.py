@@ -47,3 +47,8 @@ class MarketContext:
     role_group_priority: dict[str, str]
     regime_relevance_adjustments: dict[str, float]
     asset_context_notes: dict[str, str]
+    air_mass_ratios: dict[str, float] = field(default_factory=dict)
+    air_mass_strengths: dict[str, str] = field(default_factory=dict)
+    top_updrafts: list[dict[str, Any]] = field(default_factory=list)
+    top_downdrafts: list[dict[str, Any]] = field(default_factory=list)
+    btc_divergence_note: str = ""

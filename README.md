@@ -653,3 +653,11 @@ python -m el_shaddai.integrated_audit --demo
 報告書は標準出力に表示され、`artifacts/demo/el_shaddai_integrated_audit_report.md` にも保存されます。Python からは `run_integrated_audit(asset_audits, portfolio, market_amedas=None)` を呼び出すと、構造化された辞書と `report_text` を取得できます。
 
 統合監査では、内部の役割証拠、市場文脈反映後の健全度、負傷判定を分離します。Market Amedas の弱い局面補正や低信頼だけでは負傷を生成せず、市場文脈だけが補正判断レベル2以上を示した場合は `1. 監視強化` に制限します。
+
+2026年6月6日向けの Market Amedas デモシナリオでは、主要気団比率・気団の強弱・主要な上昇流／下降流・BTC逆行注意を含む報告書を生成できます。
+
+```bash
+python -m el_shaddai.integrated_audit --demo --scenario market_amedas_20260606
+```
+
+生成される報告書は `artifacts/demo/el_shaddai_integrated_audit_report_market_amedas_20260606.md` に保存されます。報告書の保存・表示前には端末UI由来の `:codex-terminal-citation[...]` メタ文字列を除去します。

@@ -156,8 +156,15 @@ def run_integrated_audit(asset_audits: Iterable[AssetAuditInput], portfolio: Por
         action = 1
         hysteresis_note = f"{ACTION_LABELS_JA[raw_action]}候補だが、同一警戒判定が2回連続していないため監視継続。"
 
+    role_group_diagnosis = _role_diagnosis(rows)
+    watch_groups = [group for group, diagnosis in role_group_diagnosis.items() if diagnosis["level"] <= 3]
     recommended = ["固定比率と既存の乖離ルールを維持する。"]
-    recommended.append("負傷アセットを次回監査で重点確認する。" if wounded else "要監視の役割グループを次回監査で確認する。")
+    if wounded:
+        recommended.append("負傷アセットを次回監査で重点確認する。")
+    if watch_groups:
+        recommended.append(f"{'・'.join(watch_groups)}グループを次回監査で確認する。")
+    if context.btc_divergence_note:
+        recommended.append(context.btc_divergence_note)
     if action >= 2: recommended.append("継続警戒を確認したうえで、既存ルール内の補正を人間が検討する。")
     elif action == 1: recommended.append("配分変更を急がず、監視頻度を上げる。")
     not_recommended = ["Market Amedasの市場気象のみを理由に売却しない。", "低スコア資産を機械的に売却しない。", "監査結果から自動売買を実行しない。"]
@@ -171,24 +178,39 @@ def run_integrated_audit(asset_audits: Iterable[AssetAuditInput], portfolio: Por
         "contextual_action_candidate_level": contextual_action_candidate, "internal_action_level": internal_action,
         "raw_action_level": raw_action, "action_level": action, "action_label": ACTION_LABELS_JA[action],
         "portfolio_adjustment_recommendation": {"level": action, "label": ACTION_LABELS_JA[action], "advisory_only": True},
-        "hysteresis_note": hysteresis_note, "market_context_safety_note": market_context_safety_note, "asset_health_rank": rows, "wounded_assets": wounded, "role_group_diagnosis": _role_diagnosis(rows),
+        "hysteresis_note": hysteresis_note, "market_context_safety_note": market_context_safety_note, "asset_health_rank": rows, "wounded_assets": wounded, "role_group_diagnosis": role_group_diagnosis,
         "market_context": asdict(context), "market_context_summary": context.market_context_summary,
         "recommended_actions": recommended, "not_recommended_actions": not_recommended, "next_checkpoints": checkpoints,
         "correlation_integrity_score": correlation_score if correlation_available else None,
-        "correlation_diagnosis": f"相関健全度：{correlation_score:.1f} / 100。" if correlation_available else "相関データ未提供のため、中立値 1.00 を使用した。",
+        "correlation_diagnosis": f"相関健全度：{correlation_score:.1f} / 100。" if correlation_available else "相関データ未提供のため、中立値 1.00 を使用した。今回のスコアには、危機時分散の実測評価は含まれていない。",
         "components": {"weighted_asset_health": round(weighted_health, 2), "internal_weighted_asset_health": round(internal_weighted_health, 2), "role_coverage_factor": round(role_coverage_factor, 3), "correlation_integrity_factor": round(correlation_factor, 3), "concentration_penalty": round(concentration_penalty, 3)},
     }
     result["report_text"] = render_integrated_report(result)
     return result
 
 
-def _demo() -> int:
+def _demo_inputs(scenario: str) -> tuple[list[AssetAuditInput], PortfolioInput, MarketAmedasInput]:
     assets = [("VT", "O.R.A.C.L.E.", 84), ("BTC", "O.R.A.C.L.E.", 70), ("TLT", "L.O.D.E.", 62), ("TIP", "I.N.F.E.R.N.O.", 79), ("GLDM", "A.U.R.A.", 88), ("XLRE", "A.R.C.A.D.I.A.", 68), ("BNDX", "A.T.L.A.S.", 76), ("DBC", "G.A.I.A.", 72)]
     audits = [AssetAuditInput(a, e, s, confidence_level=4, diagnosis_summary="デモ用役割監査") for a, e, s in assets]
     portfolio = PortfolioInput({a: 1 / 8 for a, _, _ in assets})
-    market = MarketAmedasInput({"yield": 60, "growth": 70, "defense": 35, "inflation": 45}, {}, {}, {}, "neutral")
+    if scenario == "market_amedas_20260606":
+        market = MarketAmedasInput(
+            {"yield": 62, "growth": 72, "defense": 28, "inflation": 32},
+            {"junk_oxygen": "healthy", "smallcap_geothermal": "warm"},
+            {"VT": 78, "smallcap": 71, "junk": 65, "XLRE": 53, "oil": 47},
+            {"BTC": 76, "TLT": 64, "BNDX": 55, "gold": 48, "commodity": 42},
+            "growth negative divergence",
+        )
+    else:
+        market = MarketAmedasInput({"yield": 60, "growth": 70, "defense": 35, "inflation": 45}, {}, {}, {}, "neutral")
+    return audits, portfolio, market
+
+
+def _demo(scenario: str = "default") -> int:
+    audits, portfolio, market = _demo_inputs(scenario)
     result = run_integrated_audit(audits, portfolio, market)
-    path = Path("artifacts/demo/el_shaddai_integrated_audit_report.md")
+    filename = "el_shaddai_integrated_audit_report.md" if scenario == "default" else f"el_shaddai_integrated_audit_report_{scenario}.md"
+    path = Path("artifacts/demo") / filename
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(result["report_text"], encoding="utf-8")
     print(result["report_text"], end="")
@@ -199,8 +221,9 @@ def _demo() -> int:
 def main() -> int:
     parser = argparse.ArgumentParser(description="El Shaddai v2.0 統合監査")
     parser.add_argument("--demo", action="store_true", help="日本語のサンプル統合監査報告書を生成する")
+    parser.add_argument("--scenario", choices=("default", "market_amedas_20260606"), default="default", help="デモで使用する市場シナリオ")
     args = parser.parse_args()
-    if args.demo: return _demo()
+    if args.demo: return _demo(args.scenario)
     parser.error("現在は --demo を指定してください")
     return 2
 

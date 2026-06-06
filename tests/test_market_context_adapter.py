@@ -18,5 +18,18 @@ def test_market_flags_and_adjustments_are_compact_and_bounded():
     assert "btc_negative_divergence" in context.market_context_flags
     assert all(0.9 <= value <= 1.1 for value in context.regime_relevance_adjustments.values())
     assert "売却判断に直結させない" in context.market_context_summary
-    assert "金利気団が優勢" in context.market_context_summary
+    assert "利回り気団が優勢" in context.market_context_summary
     assert "yield_air_mass_dominant" not in context.market_context_summary
+
+
+def test_market_context_exposes_air_masses_flows_and_btc_divergence_in_japanese():
+    context = adapt_market_context(MarketAmedasInput(
+        {"yield": 62, "growth": 72, "defense": 28, "inflation": 32}, {},
+        {"VT": 78, "smallcap": 71, "junk": 65, "XLRE": 53},
+        {"BTC": 76, "TLT": 64, "BNDX": 55, "gold": 48}, "growth negative divergence",
+    ))
+    assert sum(context.air_mass_ratios.values()) == 100.0
+    assert set(context.air_mass_strengths) == {"利回り気団", "成長気団", "防衛気団", "インフレ気団"}
+    assert context.top_updrafts[0]["name"] == "世界株式"
+    assert context.top_downdrafts[0]["name"] == "BTC"
+    assert "成長気団が強い中で逆行" in context.btc_divergence_note
