@@ -660,4 +660,6 @@ python -m el_shaddai.integrated_audit --demo
 python -m el_shaddai.integrated_audit --demo --scenario market_amedas_20260606
 ```
 
-生成される報告書は `artifacts/demo/el_shaddai_integrated_audit_report_market_amedas_20260606.md` に保存されます。報告書の保存・表示前には端末UI由来の `:codex-terminal-citation[...]` メタ文字列を除去します。
+生成される報告書は `artifacts/demo/el_shaddai_integrated_audit_market_amedas_20260606.md` に保存されます。報告書の保存・表示前には端末UI由来の `:codex-terminal-citation[...]` メタ文字列を除去します。
+
+`market_amedas_20260606` は、利回り気団 50.2%、成長気団 44.7%、防衛気団 4.4%、インフレ気団 0.7% の観測比率と、符号付きの上昇流・下降流実測値を使用します。観測値は表示用に保持し、市場文脈補正は従来どおり資産健全度側に限定して、負傷判定には使用しません。

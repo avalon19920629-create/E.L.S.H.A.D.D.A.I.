@@ -52,3 +52,5 @@ class MarketContext:
     top_updrafts: list[dict[str, Any]] = field(default_factory=list)
     top_downdrafts: list[dict[str, Any]] = field(default_factory=list)
     btc_divergence_note: str = ""
+    market_narratives: list[str] = field(default_factory=list)
+    btc_sensor_summary: str = ""

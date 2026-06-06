@@ -11,7 +11,7 @@ REQUIRED_SECTIONS = (
     "総合診断", "要約", "今回推奨する行動", "今回推奨しない行動", "八騎士 健全度順位", "負傷アセット",
     "役割グループ診断", "市場文脈", "相関構造診断", "次回監査で確認すること", "最終メッセージ",
 )
-_CODEX_TERMINAL_CITATION = re.compile(r":codex-terminal-citation\[[^\r\n]*\]", re.IGNORECASE)
+_CODEX_TERMINAL_CITATION = re.compile(r":codex-terminal-citation(?:\[[^]\r\n]*\])?(?:\{[^\r\n]*\})?", re.IGNORECASE)
 
 
 def _bullets(items: list[str]) -> list[str]:
@@ -54,12 +54,13 @@ def render_integrated_report(result: Mapping[str, Any]) -> str:
     for group, diagnosis in result["role_group_diagnosis"].items(): lines.append(f"・{group}：{diagnosis['label']}（平均 {diagnosis['score']:.1f}）")
 
     context = result["market_context"]
-    lines += ["", "【市場文脈】", context["market_context_summary"]]
+    lines += ["", "【市場文脈】", context["market_context_summary"], *context["market_narratives"]]
     if context["air_mass_ratios"]:
-        lines.append("主要気団の比率：" + "、".join(f"{name} {ratio:.1f}%" for name, ratio in context["air_mass_ratios"].items()))
-        lines.append("主要気団の強弱：" + "、".join(f"{name} {strength}" for name, strength in context["air_mass_strengths"].items()))
-    if context["top_updrafts"]: lines.append("主要な上昇流：" + "、".join(f"{flow['name']} {flow['strength']:.1f}" for flow in context["top_updrafts"]))
-    if context["top_downdrafts"]: lines.append("主要な下降流：" + "、".join(f"{flow['name']} {flow['strength']:.1f}" for flow in context["top_downdrafts"]))
+        lines.append("主要気団の比率（Market Amedas観測値）：" + "、".join(f"{name} {ratio:.1f}%" for name, ratio in context["air_mass_ratios"].items()))
+        lines.append("主要気団の強弱（内部正規化後）：" + "、".join(f"{name} {strength}" for name, strength in context["air_mass_strengths"].items()))
+    if context["top_updrafts"]: lines.append("主要な上昇流：" + "、".join(f"{flow['name']} {flow['observed_value']:+.2f}" for flow in context["top_updrafts"]))
+    if context["top_downdrafts"]: lines.append("主要な下降流：" + "、".join(f"{flow['name']} {flow['observed_value']:+.2f}" if flow['observed_value'] else f"{flow['name']} 0.00" for flow in context["top_downdrafts"]))
+    if context["btc_sensor_summary"]: lines.append(f"BTCセンサー：{context['btc_sensor_summary']}")
     if context["btc_divergence_note"]: lines.append(f"BTC注意：{context['btc_divergence_note']}")
     lines += _bullets([f"文脈フラグ：{MARKET_CONTEXT_FLAG_LABELS_JA.get(flag, flag)}" for flag in context["market_context_flags"]])
     lines += _bullets([f"{asset}：{note}" for asset, note in context["asset_context_notes"].items()]) if context["asset_context_notes"] else []

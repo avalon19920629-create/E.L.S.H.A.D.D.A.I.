@@ -169,8 +169,10 @@ def run_integrated_audit(asset_audits: Iterable[AssetAuditInput], portfolio: Por
     elif action == 1: recommended.append("配分変更を急がず、監視頻度を上げる。")
     not_recommended = ["Market Amedasの市場気象のみを理由に売却しない。", "低スコア資産を機械的に売却しない。", "監査結果から自動売買を実行しない。"]
     checkpoints = [f"{row['asset']}の{row['wound_label']}が継続するか確認する。" for row in wounded[:4]]
-    if context.market_context_flags != ["neutral_market_context"]: checkpoints.append("Market Amedasの文脈フラグと役割健全性を分離して再確認する。")
-    if not correlation_available: checkpoints.append("相関データを取得し、相関構造の健全性を確認する。")
+    if context.btc_divergence_note: checkpoints.append("BTCが成長気団に再連動するか確認する。")
+    if "defense_air_mass_absent" in context.market_context_flags: checkpoints.append("TLTとBNDXが景気後退防衛として機能しているか確認する。")
+    if "gold_commodity_weakness" in context.market_context_flags: checkpoints.append("GLDM・DBCの弱さが局面不適合か、役割劣化かを確認する。")
+    if not correlation_available: checkpoints.append("VT/TLT、VT/GLDM、VT/BTCの相関構造を確認する。")
 
     result: dict[str, Any] = {
         "sanctuary_health_score": sanctuary, "internal_sanctuary_health_score": internal_sanctuary, "global_judgment_level": global_level, "global_judgment_label": GLOBAL_JUDGMENT_LABELS_JA[global_level],
@@ -195,11 +197,11 @@ def _demo_inputs(scenario: str) -> tuple[list[AssetAuditInput], PortfolioInput, 
     portfolio = PortfolioInput({a: 1 / 8 for a, _, _ in assets})
     if scenario == "market_amedas_20260606":
         market = MarketAmedasInput(
-            {"yield": 62, "growth": 72, "defense": 28, "inflation": 32},
-            {"junk_oxygen": "healthy", "smallcap_geothermal": "warm"},
-            {"VT": 78, "smallcap": 71, "junk": 65, "XLRE": 53, "oil": 47},
-            {"BTC": 76, "TLT": 64, "BNDX": 55, "gold": 48, "commodity": 42},
-            "growth negative divergence",
+            {"yield": 50.2, "growth": 44.7, "defense": 4.4, "inflation": 0.7},
+            {"usd_wind": "凪（影響なし）", "junk_oxygen": "正常（健全な上昇）", "smallcap_geothermal": "温暖（景気回復は本物）"},
+            {"value": 0.48, "nasdaq": 0.41, "high_dividend": 0.37, "reit": 0.36, "us_equity": 0.33, "smallcap": 0.28, "junk": 0.17, "developed": 0.17, "tlt": 0.13, "emerging": 0.12, "corporate_bond": 0.08, "inflation_linked": 0.02},
+            {"cash": 0.00, "commodity": -0.14, "gold": -0.28, "btc": -0.54},
+            "デジタルゴールド (Summer) モード",
         )
     else:
         market = MarketAmedasInput({"yield": 60, "growth": 70, "defense": 35, "inflation": 45}, {}, {}, {}, "neutral")
@@ -209,7 +211,7 @@ def _demo_inputs(scenario: str) -> tuple[list[AssetAuditInput], PortfolioInput, 
 def _demo(scenario: str = "default") -> int:
     audits, portfolio, market = _demo_inputs(scenario)
     result = run_integrated_audit(audits, portfolio, market)
-    filename = "el_shaddai_integrated_audit_report.md" if scenario == "default" else f"el_shaddai_integrated_audit_report_{scenario}.md"
+    filename = "el_shaddai_integrated_audit_report.md" if scenario == "default" else f"el_shaddai_integrated_audit_{scenario}.md"
     path = Path("artifacts/demo") / filename
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(result["report_text"], encoding="utf-8")
