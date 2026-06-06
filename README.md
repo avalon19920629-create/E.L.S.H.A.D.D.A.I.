@@ -556,3 +556,86 @@ Markdown report には以下が追加されます。
 ### O.R.A.C.L.E. fallback 仕様
 
 O.R.A.C.L.E. 入力がない場合、または VT/BTC の入力が不足している場合でも CLI は停止しません。VT/BTC は既存の `price_score` ベース判定へ fallback し、warning を stdout と Markdown report に出力します。これにより、El Shaddai の Role 監査思想を崩さず、VT/BTC だけを永年保有アセット専用の神託エンジンとして扱えます。
+
+## G.A.I.A. DBC Commodity Role Adapter
+
+**G.A.I.A.** means **Global Asset Intelligence for Inflationary Abundance**. It audits whether DBC, or a DBC-like commodity exposure, is fulfilling its intended L.U.M.U.S.-8 role as the Summer / inflation air-mass attack asset.
+
+G.A.I.A. deliberately separates the audit anchor from the instrument that may be held in real operations:
+
+```text
+Audit target: DBC / Commodity Regime
+Actual holding target: eMAXIS commodity products or similar SBI-available commodity funds
+```
+
+DBC remains the El Shaddai audit anchor because A.U.R.A. already uses DBC as the primary commodity-regime anchor, DBC bundles energy, metals, and agriculture into a convenient commodity proxy, and G.A.I.A. audits the **commodity role** rather than the price behavior of one local product.
+
+### DBC role definition
+
+DBC is treated as:
+
+- 属性攻撃
+- インフレ局面における爆発力
+- 資源ショック対策
+- 文明の燃料
+- Summer / インフレ気団の攻撃資産
+
+In normal weather DBC may remain quiet. When inflation or resource shocks arrive, it should burn as civilization's fuel and compensate for stagnation elsewhere in the portfolio. G.A.I.A. therefore asks: **is DBC correctly burning as civilization's fuel, or is it merely moving as noise?**
+
+### Tickers and proxies
+
+Live mode uses `yfinance` when available. Candidate tickers are:
+
+```text
+DBC, USO, UNG, GLD, CPER, DBA, SPY, UUP, TIP, GLDM, TLT, BNDX
+```
+
+The generated DBC role proxies are direction-adjusted to `-2..+2`, where `+2` is highly favorable for DBC's role, `0` is neutral, and `-2` means the commodity role is materially impaired.
+
+Core proxies: `commodity_trend`, `inflation_firepower`, `resource_shock_response`, `summer_regime_strength`.
+Support proxies: `energy_leadership`, `metals_leadership`, `agriculture_leadership`, `tip_gldm_alignment`.
+Risk-penalty proxies: `deflation_drag`, `dollar_headwind`, `growth_collapse`, `commodity_noise`.
+
+### Manual CSV route
+
+Manual data takes priority over live fetch. The sample wide-format CSV is `data/sample_gaia_prices.csv` and uses these columns:
+
+```text
+date,dbc_close,uso_close,ung_close,gld_close,cper_close,dba_close,spy_close,uup_close,tip_close,gldm_close,tlt_close,bndx_close
+```
+
+Long format is also accepted with:
+
+```text
+date,ticker,close
+```
+
+### CLI examples
+
+```bash
+python -m el_shaddai.cli \
+  --gaia-prices-csv data/sample_gaia_prices.csv \
+  --output-dir artifacts/el_shaddai
+```
+
+Live route:
+
+```bash
+python -m el_shaddai.cli \
+  --use-gaia-dbc-role \
+  --output-dir artifacts/el_shaddai
+```
+
+### Fallback behavior
+
+If live fetch fails, `yfinance` is not installed, required data is insufficient, or correlations cannot be computed, the CLI does **not** stop. G.A.I.A. emits a warning to stdout/report output and returns neutral DBC role proxies so the broader El Shaddai audit can complete.
+
+### Regime interpretation
+
+G.A.I.A. reports one of these interpretations:
+
+- **Gaia Ignited** — Commodity fire is active; Summer regime is dominant.
+- **Gaia Smoldering** — Commodity role evidence exists but is not yet dominant.
+- **Gaia Dormant** — Commodity role is neutral or inactive.
+- **Gaia Choked** — Dollar/deflation/growth collapse suppresses commodity role.
+- **Gaia Extinguished** — Commodity regime is structurally impaired.

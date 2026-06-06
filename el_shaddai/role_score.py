@@ -126,6 +126,24 @@ def _structured_score(asset: str, components: Mapping[str, float], weights: Mapp
             adjusted = min(adjusted, 35.0)
             caps.append("TIP full penalty cap: all three risk penalties severe capped Role Score at 35")
 
+    if asset == "DBC":
+        dollar_severe = components.get("dollar_headwind", 50.0) <= 25.0
+        deflation_severe = components.get("deflation_drag", 50.0) <= 25.0
+        growth_severe = components.get("growth_collapse", 50.0) <= 25.0
+        noise_severe = components.get("commodity_noise", 50.0) <= 25.0
+        if dollar_severe:
+            adjusted = min(adjusted, 60.0)
+            caps.append("DBC dollar headwind cap: severe dollar_headwind capped Role Score at 60")
+        if dollar_severe and deflation_severe:
+            adjusted = min(adjusted, 45.0)
+            caps.append("DBC dollar + deflation cap: severe dollar_headwind and deflation_drag capped Role Score at 45")
+        if growth_severe and noise_severe:
+            adjusted = min(adjusted, 40.0)
+            caps.append("DBC growth-collapse + commodity-noise cap: severe growth_collapse and commodity_noise capped Role Score at 40")
+        if dollar_severe and deflation_severe and growth_severe:
+            adjusted = min(adjusted, 30.0)
+            caps.append("DBC full choking cap: severe dollar_headwind, deflation_drag, and growth_collapse capped Role Score at 30")
+
     if asset == "XLRE":
         real_rate_severe = components.get("real_rate_shock", 50.0) <= 25.0
         credit_severe = components.get("credit_stress", 50.0) <= 25.0
