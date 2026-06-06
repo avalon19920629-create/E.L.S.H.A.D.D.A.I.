@@ -6,6 +6,18 @@ from .models import MarketAmedasInput, MarketContext
 
 ASSETS = ("VT", "BTC", "TLT", "TIP", "GLDM", "XLRE", "BNDX", "DBC")
 
+MARKET_CONTEXT_FLAG_LABELS_JA = {
+    "neutral_market_context": "中立市場文脈",
+    "yield_air_mass_dominant": "金利気団が優勢",
+    "growth_air_mass_strong": "成長気団が強い",
+    "defense_air_mass_absent": "防衛気団が弱い",
+    "inflation_air_mass_absent": "インフレ気団が弱い",
+    "junk_oxygen_healthy": "低格付け信用環境は健全",
+    "smallcap_geothermal_warm": "小型株環境は温暖",
+    "btc_negative_divergence": "BTCに負の乖離",
+    "gold_commodity_weakness": "金・商品が弱い",
+}
+
 
 def _strength(value: float) -> float:
     """0..1 と 0..100 の入力を 0..1 に正規化する。"""
@@ -56,5 +68,6 @@ def adapt_market_context(market: MarketAmedasInput | None) -> MarketContext:
     if "gold_commodity_weakness" in flags:
         notes["GLDM"] = "金と商品に弱さ。市場気象だけで役割不全とは判定しない。"
         notes["DBC"] = "金と商品に弱さ。インフレ防衛機能を次回確認する。"
-    summary = "Market Amedas市場文脈: " + ("、".join(flags) if flags else "顕著な気象フラグなし") + "。市場気象は売却判断に直結させない。"
+    flag_summary = "、".join(MARKET_CONTEXT_FLAG_LABELS_JA[flag] for flag in flags) if flags else "顕著な気象フラグなし"
+    summary = f"Market Amedas市場文脈：{flag_summary}。市場気象は売却判断に直結させない。"
     return MarketContext(summary, flags, priority, adjustments, notes)

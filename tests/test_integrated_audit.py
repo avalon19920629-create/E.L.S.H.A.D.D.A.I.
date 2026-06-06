@@ -9,7 +9,9 @@ ENGINES = {"VT": "O.R.A.C.L.E.", "BTC": "O.R.A.C.L.E.", "TLT": "L.O.D.E.", "TIP"
 
 
 def audits(score=80, **kwargs):
-    return [AssetAuditInput(asset, ENGINES[asset], score, confidence_level=kwargs.pop("confidence_level", 3), **kwargs) for asset in ASSETS]
+    confidence_level = kwargs.get("confidence_level", 3)
+    remaining = {key: value for key, value in kwargs.items() if key != "confidence_level"}
+    return [AssetAuditInput(asset, ENGINES[asset], score, confidence_level=confidence_level, **remaining) for asset in ASSETS]
 
 
 def portfolio(previous_action_level=None):
@@ -87,3 +89,35 @@ def test_explicit_wound_level_from_engine_is_respected():
     result = run_integrated_audit(inputs, portfolio())
     vt = next(row for row in result["asset_health_rank"] if row["asset"] == "VT")
     assert vt["wound_level"] == 2
+
+
+def test_market_weather_alone_cannot_create_wounds_or_strong_action_near_threshold():
+    market = MarketAmedasInput({"yield": 100, "growth": 0, "defense": 0, "inflation": 0}, {}, {}, {}, "negative divergence")
+    without = run_integrated_audit(audits(66), portfolio(previous_action_level=2))
+    with_weather = run_integrated_audit(audits(66), portfolio(previous_action_level=2), market)
+
+    assert without["action_level"] == 1
+    assert with_weather["action_level"] == 1
+    assert with_weather["contextual_action_candidate_level"] == 2
+    assert with_weather["internal_action_level"] == 1
+    assert with_weather["raw_action_level"] == 1
+    assert with_weather["wounded_assets"] == []
+    assert with_weather["market_context_safety_note"]
+    assert with_weather["sanctuary_health_score"] < with_weather["internal_sanctuary_health_score"]
+
+
+def test_out_of_range_confidence_is_normalized_to_public_labels():
+    inputs = audits(80)
+    inputs[0].confidence_level = 99
+    inputs[1].confidence_level = -3
+    result = run_integrated_audit(inputs, portfolio())
+    by_asset = {row["asset"]: row for row in result["asset_health_rank"]}
+    assert by_asset["VT"]["confidence_level"] == 5
+    assert by_asset["BTC"]["confidence_level"] == 1
+
+
+def test_low_confidence_alone_does_not_create_wounds_or_aggressive_action():
+    result = run_integrated_audit(audits(70, confidence_level=1), portfolio(previous_action_level=3))
+    assert result["wounded_assets"] == []
+    assert result["action_level"] <= 1
+    assert "平均信頼度が低いため" in result["hysteresis_note"]

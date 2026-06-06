@@ -651,3 +651,5 @@ python -m el_shaddai.integrated_audit --demo
 ```
 
 報告書は標準出力に表示され、`artifacts/demo/el_shaddai_integrated_audit_report.md` にも保存されます。Python からは `run_integrated_audit(asset_audits, portfolio, market_amedas=None)` を呼び出すと、構造化された辞書と `report_text` を取得できます。
+
+統合監査では、内部の役割証拠、市場文脈反映後の健全度、負傷判定を分離します。Market Amedas の弱い局面補正や低信頼だけでは負傷を生成せず、市場文脈だけが補正判断レベル2以上を示した場合は `1. 監視強化` に制限します。

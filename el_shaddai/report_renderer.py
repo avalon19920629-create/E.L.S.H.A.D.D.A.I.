@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
+from .market_context_adapter import MARKET_CONTEXT_FLAG_LABELS_JA
+
 REQUIRED_SECTIONS = (
     "総合診断", "要約", "今回推奨する行動", "今回推奨しない行動", "八騎士 健全度順位", "負傷アセット",
     "役割グループ診断", "市場文脈", "相関構造診断", "次回監査で確認すること", "最終メッセージ",
@@ -19,6 +21,7 @@ def render_integrated_report(result: Mapping[str, Any]) -> str:
     lines = ["=" * 60, "EL SHADDAI 統合監査報告書 v2.0", "=" * 60, "", "【総合診断】"]
     lines += [
         f"聖域健全度スコア：{result['sanctuary_health_score']:.1f} / 100",
+        f"内部役割健全度スコア：{result['internal_sanctuary_health_score']:.1f} / 100",
         f"総合診断：{result['global_judgment_label']}",
         f"推奨運用判断：{result['action_label']}（助言のみ・自動売買なし）",
     ]
@@ -32,9 +35,9 @@ def render_integrated_report(result: Mapping[str, Any]) -> str:
     lines += ["", "【要約】", *summary, "", "【今回推奨する行動】", *_bullets(result["recommended_actions"])]
     lines += ["", "【今回推奨しない行動】", *_bullets(result["not_recommended_actions"])]
 
-    lines += ["", "【八騎士 健全度順位】"]
+    lines += ["", "【八騎士 健全度順位】", "文脈健全度ラベルと負傷判定は別判定であり、市場文脈だけでは負傷扱いにしない。"]
     for index, asset in enumerate(result["asset_health_rank"], 1):
-        lines.append(f"{index}. {asset['asset']} / {asset['audit_engine']}：{asset['asset_health_score']:.1f} / {asset['health_label']} / {asset['wound_label']}")
+        lines.append(f"{index}. {asset['asset']} / {asset['audit_engine']}：文脈反映後 {asset['asset_health_score']:.1f} / 内部 {asset['internal_health_score']:.1f} / 文脈健全度 {asset['health_label']} / 負傷判定 {asset['wound_label']}")
 
     lines += ["", "【負傷アセット】"]
     if not result["wounded_assets"]:
@@ -49,7 +52,10 @@ def render_integrated_report(result: Mapping[str, Any]) -> str:
 
     context = result["market_context"]
     lines += ["", "【市場文脈】", context["market_context_summary"]]
-    lines += _bullets([f"文脈フラグ: {flag}" for flag in context["market_context_flags"]])
+    lines += _bullets([f"文脈フラグ：{MARKET_CONTEXT_FLAG_LABELS_JA.get(flag, flag)}" for flag in context["market_context_flags"]])
+    lines += _bullets([f"{asset}：{note}" for asset, note in context["asset_context_notes"].items()]) if context["asset_context_notes"] else []
+    if result.get("market_context_safety_note"):
+        lines.append(f"安全制約：{result['market_context_safety_note']}")
     lines += ["Market Amedas単独では売却・配分変更を正当化しない。"]
 
     lines += ["", "【相関構造診断】", result["correlation_diagnosis"]]

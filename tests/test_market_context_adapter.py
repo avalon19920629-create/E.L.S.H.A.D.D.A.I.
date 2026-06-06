@@ -18,3 +18,5 @@ def test_market_flags_and_adjustments_are_compact_and_bounded():
     assert "btc_negative_divergence" in context.market_context_flags
     assert all(0.9 <= value <= 1.1 for value in context.regime_relevance_adjustments.values())
     assert "売却判断に直結させない" in context.market_context_summary
+    assert "金利気団が優勢" in context.market_context_summary
+    assert "yield_air_mass_dominant" not in context.market_context_summary
