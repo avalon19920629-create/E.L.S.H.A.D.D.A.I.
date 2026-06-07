@@ -1,8 +1,8 @@
-# El Shaddai 健全度診断システム v1.8
+# El Shaddai 健全度診断システム v2.0
 
-El Shaddai は、三体戦略における監査対象資産を **Permanent Holdings / Value Opportunity Only** と **Role-Audited Assets** に分け、説明可能性を優先して診断する v1.8 初期版です。売買予測やブラックボックスの機械学習モデルではなく、スポット買い好機、資産の役割健全性、元気玉（追加投資資金）の投入先候補を人間が監査できる形で提示します。
+El Shaddai は、三体戦略における監査対象資産を **Permanent Holdings / Value Opportunity Only** と **Role-Audited Assets** に分け、説明可能性を優先して診断する監査システムです。v2.0 では既存の資産別監査に L.U.M.U.S.-8 統合監査層を追加し、役割健全性と助言専用の運用判断を日本語で提示します。売買予測やブラックボックスの機械学習、自動売買は行いません。
 
-v1.8 は「実運用完成版」ではなく、透明性・説明可能性・監査可能性・将来拡張性を優先した器です。
+v2.0 は「実運用完成版」ではなく、透明性・説明可能性・監査可能性・将来拡張性を優先した器です。
 
 ## 対象アセットの分類
 
@@ -639,3 +639,27 @@ G.A.I.A. reports one of these interpretations:
 - **Gaia Dormant** — Commodity role is neutral or inactive.
 - **Gaia Choked** — Dollar/deflation/growth collapse suppresses commodity role.
 - **Gaia Extinguished** — Commodity regime is structurally impaired.
+
+## El Shaddai 統合監査層 v2.0
+
+v2.0 の統合監査層は、L.U.M.U.S.-8 の8資産監査結果を `AssetAuditInput` に正規化し、役割健全度順位、負傷アセット、役割グループ診断、聖域健全度、総合診断、助言専用の運用判断をまとめます。低スコアを自動売却へ変換せず、Market Amedas は弱い市場文脈としてのみ利用します。補正候補には継続判定（ヒステリシス）を適用し、自動売買は実装しません。
+
+日本語のサンプル統合監査報告書は次のコマンドで生成できます。
+
+```bash
+python -m el_shaddai.integrated_audit --demo
+```
+
+報告書は標準出力に表示され、`artifacts/demo/el_shaddai_integrated_audit_report.md` にも保存されます。Python からは `run_integrated_audit(asset_audits, portfolio, market_amedas=None)` を呼び出すと、構造化された辞書と `report_text` を取得できます。
+
+統合監査では、内部の役割証拠、市場文脈反映後の健全度、負傷判定を分離します。Market Amedas の弱い局面補正や低信頼だけでは負傷を生成せず、市場文脈だけが補正判断レベル2以上を示した場合は `1. 監視強化` に制限します。
+
+2026年6月6日向けの Market Amedas デモシナリオでは、主要気団比率・気団の強弱・主要な上昇流／下降流・BTC逆行注意を含む報告書を生成できます。
+
+```bash
+python -m el_shaddai.integrated_audit --demo --scenario market_amedas_20260606
+```
+
+生成される報告書は `artifacts/demo/el_shaddai_integrated_audit_market_amedas_20260606.md` に保存されます。報告書の保存・表示前には端末UI由来の `:codex-terminal-citation[...]` メタ文字列を除去します。
+
+`market_amedas_20260606` は、利回り気団 50.2%、成長気団 44.7%、防衛気団 4.4%、インフレ気団 0.7% の観測比率と、符号付きの上昇流・下降流実測値を使用します。観測値は表示用に保持し、市場文脈補正は従来どおり資産健全度側に限定して、負傷判定には使用しません。
