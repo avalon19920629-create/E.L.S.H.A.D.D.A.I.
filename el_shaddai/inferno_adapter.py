@@ -9,14 +9,15 @@ favorable for TIP's purchasing-power-defense role.
 from __future__ import annotations
 
 import csv
-import io
-import urllib.parse
-import urllib.request
 from dataclasses import dataclass
 from datetime import date, timedelta
 from typing import Dict, Iterable, List, Mapping, Optional, Sequence
 
 from .config import DEFAULT_ROLE_INPUTS
+from .fred_data import (
+    DEFAULT_FRED_PAUSE, DEFAULT_FRED_RETRY_COUNT, DEFAULT_FRED_TIMEOUT,
+    fetch_fred_series_rows, load_fred_cache, save_fred_cache,
+)
 
 INFERNO_FRED_SERIES: Mapping[str, str] = {
     "CPIAUCSL": "Consumer Price Index for All Urban Consumers",
@@ -73,6 +74,8 @@ class InfernoResult:
     used_inferno: bool
     inflation_regime_interpretation: str
     applied_caps: List[str]
+    degraded: bool = False
+    stale_days: Optional[int] = None
 
 
 def _to_float(value: str | None) -> Optional[float]:
@@ -93,34 +96,15 @@ def _neutral_result(warnings: List[str], source: str = "I.N.F.E.R.N.O. FRED") ->
     return InfernoResult({"TIP": neutral}, neutral, {}, warnings, "unknown", source, False, "neutral fallback", [])
 
 
-def _fred_csv_url(series_id: str, start: str, end: str) -> str:
-    params = urllib.parse.urlencode({"id": series_id, "cosd": start, "coed": end})
-    return f"https://fred.stlouisfed.org/graph/fredgraph.csv?{params}"
-
-
-def _fetch_one_series(series_id: str, start: str, end: str) -> Dict[str, Optional[float]]:
-    with urllib.request.urlopen(_fred_csv_url(series_id, start, end), timeout=20) as response:
-        text = response.read().decode("utf-8")
-    return {row["observation_date"]: _to_float(row[series_id]) for row in csv.DictReader(io.StringIO(text))}
-
-
-def fetch_inferno_fred_data(start: str | date | None = None, end: str | date | None = None) -> List[Dict[str, float | str | None]]:
+def fetch_inferno_fred_data(
+    start: str | date | None = None, end: str | date | None = None, *,
+    retry_count: int = DEFAULT_FRED_RETRY_COUNT, pause: float = DEFAULT_FRED_PAUSE,
+    timeout: float = DEFAULT_FRED_TIMEOUT, provider: str = "pandas_datareader",
+) -> List[Dict[str, float | str | None]]:
+    """Fetch required I.N.F.E.R.N.O. series through the shared FRED foundation."""
     end_date = end or date.today()
     start_date = start or (date.today() - timedelta(days=365 * 10))
-    start_text = start_date.isoformat() if isinstance(start_date, date) else str(start_date)
-    end_text = end_date.isoformat() if isinstance(end_date, date) else str(end_date)
-    series_data = {series_id: _fetch_one_series(series_id, start_text, end_text) for series_id in INFERNO_FRED_SERIES}
-    all_dates = sorted({row_date for values in series_data.values() for row_date in values})
-    latest_values: Dict[str, Optional[float]] = {series_id: None for series_id in INFERNO_FRED_SERIES}
-    rows: List[Dict[str, float | str | None]] = []
-    for row_date in all_dates:
-        row: Dict[str, float | str | None] = {"date": row_date}
-        for series_id, observations in series_data.items():
-            if row_date in observations and observations[row_date] is not None:
-                latest_values[series_id] = observations[row_date]
-            row[series_id] = latest_values[series_id]
-        rows.append(row)
-    return rows
+    return fetch_fred_series_rows(list(INFERNO_FRED_SERIES), start_date, end_date, retry_count=retry_count, pause=pause, timeout=timeout, provider=provider)
 
 
 def load_inferno_csv(path: str) -> List[Dict[str, float | str | None]]:
@@ -280,9 +264,28 @@ def tip_role_inputs_from_csv(path: str) -> InfernoResult:
         )
 
 
-def latest_tip_role_inputs(start: str | date | None = None, end: str | date | None = None) -> InfernoResult:
+def latest_tip_role_inputs(
+    start: str | date | None = None, end: str | date | None = None, *,
+    retry_count: int = DEFAULT_FRED_RETRY_COUNT, pause: float = DEFAULT_FRED_PAUSE,
+    timeout: float = DEFAULT_FRED_TIMEOUT, cache_dir: str | None = None,
+    fred_provider: str = "pandas_datareader",
+) -> InfernoResult:
+    """Use live FRED, then last-successful cache, then neutral fallback."""
     try:
-        result = compute_tip_role_proxies(fetch_inferno_fred_data(start, end))
+        rows = fetch_inferno_fred_data(start, end, retry_count=retry_count, pause=pause, timeout=timeout, provider=fred_provider)
+        result = compute_tip_role_proxies(rows)
+        if result.used_inferno and cache_dir:
+            save_fred_cache(cache_dir, "inferno", rows)
         return result
-    except Exception as exc:  # noqa: BLE001 - CLI must continue on provider issues.
-        return _neutral_result([f"warning: failed to fetch I.N.F.E.R.N.O. FRED data ({exc}); neutral TIP Role proxy fallback applied."])
+    except Exception as exc:  # noqa: BLE001 - provider failure must not stop an audit.
+        if cache_dir:
+            try:
+                rows, stale_days, path = load_fred_cache(cache_dir, "inferno")
+                result = compute_tip_role_proxies(rows)
+                if result.used_inferno:
+                    warning = f"warning: live I.N.F.E.R.N.O. FRED fetch failed ({exc}); using last successful cache {path} ({stale_days} stale days)."
+                    return InfernoResult(result.role_inputs, result.proxies, result.reasons, result.warnings + [warning], result.data_date, "cache", True, result.inflation_regime_interpretation, result.applied_caps, True, stale_days)
+            except Exception:
+                pass
+        neutral = _neutral_result([f"warning: failed to fetch I.N.F.E.R.N.O. FRED data ({exc}); no usable cache; neutral TIP Role proxy fallback applied."])
+        return InfernoResult(neutral.role_inputs, neutral.proxies, neutral.reasons, neutral.warnings, neutral.data_date, neutral.source, neutral.used_inferno, neutral.inflation_regime_interpretation, neutral.applied_caps, True, None)
