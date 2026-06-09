@@ -77,6 +77,13 @@ def _one_line_summary(text: str, injury_type: str) -> str:
     return summary if len(summary) <= 72 else summary[:69].rstrip() + "..."
 
 
+def _display_status(audit_engine: str, wound_level: int, health_label: str) -> str:
+    """O.R.A.C.L.E.の機会評価を、役割健全度ラベルから表示上分離する。"""
+    if audit_engine == "O.R.A.C.L.E.":
+        return "追加買い候補" if wound_level > 0 else "機会中立"
+    return health_label
+
+
 def _recommended_action(injury_type: str) -> str:
     if injury_type == "追加買い判定":
         return "既存ルール内で追加買い機会を確認"
@@ -120,7 +127,7 @@ def run_integrated_audit(asset_audits: Iterable[AssetAuditInput], portfolio: Por
         injury_type = _injury_type(audit.audit_engine, wound)
         rows.append({
             "asset": audit.asset, "audit_engine": audit.audit_engine, "asset_health_score": score, "internal_health_score": internal_score, "role_evidence_score": role_evidence_score, "health_level": level,
-            "health_label": HEALTH_LABELS_JA[level], "wound_level": wound, "wound_label": WOUND_TYPE_LABELS_JA[wound], "injury_type": injury_type,
+            "health_label": HEALTH_LABELS_JA[level], "display_status": _display_status(audit.audit_engine, wound, HEALTH_LABELS_JA[level]), "wound_level": wound, "wound_label": WOUND_TYPE_LABELS_JA[wound], "injury_type": injury_type,
             "confidence_level": confidence_level, "confidence_label": CONFIDENCE_LABELS_JA[confidence_level],
             "diagnosis_summary": audit.diagnosis_summary, "one_line_summary": _one_line_summary(audit.diagnosis_summary, injury_type), "recommended_action": _recommended_action(injury_type),
             "risk_flags": list(audit.risk_flags), "multipliers": {"regime_relevance": regime, "confidence": confidence_multiplier(audit.confidence_level), "penalty": penalty},

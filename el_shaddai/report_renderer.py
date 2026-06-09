@@ -2,17 +2,15 @@
 
 from __future__ import annotations
 
-import re
 from typing import Any, Mapping
 
 from .market_context_adapter import MARKET_CONTEXT_FLAG_LABELS_JA
+from .text_sanitizer import sanitize_output_text
 
 REQUIRED_SECTIONS = (
     "結論サマリー", "注意点", "総合診断", "要約", "今回推奨する行動", "今回推奨しない行動", "八騎士 健全度順位", "負傷アセット",
     "役割グループ診断", "市場文脈", "相関構造診断", "次回監査で確認すること", "最終メッセージ",
 )
-_CODEX_TERMINAL_CITATION = re.compile(r":codex-terminal-citation(?:\[[^]\r\n]*\])?(?:\{[^\r\n]*\})?", re.IGNORECASE)
-
 
 def _bullets(items: list[str]) -> list[str]:
     return [f"・{item}" for item in items] or ["・該当なし"]
@@ -29,7 +27,7 @@ def _table_cell(value: Any) -> str:
 
 def sanitize_report_text(text: str) -> str:
     """端末UI由来のメタ文字列を、保存・表示前の報告書から除去する。"""
-    return _CODEX_TERMINAL_CITATION.sub("", text)
+    return sanitize_output_text(text)
 
 
 def render_integrated_report(result: Mapping[str, Any]) -> str:
@@ -68,7 +66,7 @@ def render_integrated_report(result: Mapping[str, Any]) -> str:
     ]
     for asset in result["asset_health_rank"]:
         cells = (
-            asset["asset"], asset["audit_engine"], f"{asset['asset_health_score']:.1f}", asset["health_label"],
+            asset["asset"], asset["audit_engine"], f"{asset['asset_health_score']:.1f}", asset["display_status"],
             asset["injury_type"], asset["one_line_summary"], asset["recommended_action"],
         )
         lines.append("| " + " | ".join(_table_cell(cell) for cell in cells) + " |")
@@ -88,7 +86,10 @@ def render_integrated_report(result: Mapping[str, Any]) -> str:
     context = result["market_context"]
     lines += ["", "【市場文脈】", context["market_context_summary"], *context["market_narratives"]]
     if context["air_mass_ratios"]:
-        lines.append("主要気団の比率（Market Amedas観測値）：" + "、".join(f"{name} {ratio:.1f}%" for name, ratio in context["air_mass_ratios"].items()))
+        if context.get("air_mass_measure") == "ratio":
+            lines.append("主要気団の比率（合計100%の構成比）：" + "、".join(f"{name} {value:.1f}%" for name, value in context["air_mass_ratios"].items()))
+        else:
+            lines.append("主要気団の強度（各気団の独立スコア）：" + "、".join(f"{name} {value:.1f} / 100" for name, value in context["air_mass_ratios"].items()))
         lines.append("主要気団の強弱（内部正規化後）：" + "、".join(f"{name} {strength}" for name, strength in context["air_mass_strengths"].items()))
     if context["top_updrafts"]:
         lines.append("主要な上昇流：" + "、".join(f"{flow['name']} {flow['observed_value']:+.2f}" for flow in context["top_updrafts"]))

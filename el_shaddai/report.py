@@ -15,6 +15,7 @@ from .lode_adapter import LodeResult
 from .oracle_adapter import OracleResult
 from .config import ROLE_COMPONENT_GROUPS, ROLE_COMPONENT_WEIGHTS
 from .scoring import AssetScore, ranking
+from .text_sanitizer import sanitize_output_text
 
 OUTPUT_FIELDS = ["asset", "price_score", "role_score", "el_shaddai_score", "label", "main_reason", "data_date", "opportunity_score", "oracle_signal", "oracle_reason"]
 
@@ -294,5 +295,5 @@ def write_markdown(
             f"Role reasons: {'; '.join(score.role_details.reasons)}",
             "",
         ])
-    path.write_text("\n".join(lines), encoding="utf-8")
+    path.write_text(sanitize_output_text("\n".join(lines)), encoding="utf-8")
     return path

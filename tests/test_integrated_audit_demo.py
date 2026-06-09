@@ -9,8 +9,8 @@ def test_market_amedas_scenario_stdout_and_file_are_clean(tmp_path, monkeypatch,
     stdout = capsys.readouterr().out
     report = Path("artifacts/demo/el_shaddai_integrated_audit_market_amedas_20260606.md")
     assert report.is_file() and report.stat().st_size > 0
-    assert ":codex-terminal-citation" not in stdout
-    assert ":codex-terminal-citation" not in report.read_text(encoding="utf-8")
+    assert "codex-terminal-citation" not in stdout.lower()
+    assert "codex-terminal-citation" not in report.read_text(encoding="utf-8").lower()
 
 
 def test_market_amedas_20260606_uses_observed_values():
