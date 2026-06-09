@@ -7,6 +7,7 @@ import argparse
 from pathlib import Path
 
 from el_shaddai.production import run_production
+from el_shaddai.text_sanitizer import safe_print
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -19,9 +20,9 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     paths = run_production(args.config, args.output_dir)
-    print("El Shaddai production audit completed (advisory only; no automatic trading).")
+    safe_print("El Shaddai production audit completed (advisory only; no automatic trading).")
     for name, path in paths.items():
-        print(f"Wrote {name}: {Path(path)}")
+        safe_print(f"Wrote {name}: {Path(path)}")
     return 0
 
 

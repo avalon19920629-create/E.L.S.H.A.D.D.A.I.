@@ -12,6 +12,7 @@ from .labels import ACTION_LABELS_JA, CONFIDENCE_LABELS_JA, GLOBAL_JUDGMENT_LABE
 from .market_context_adapter import adapt_market_context
 from .models import AssetAuditInput, MarketAmedasInput, PortfolioInput
 from .report_renderer import render_integrated_report
+from .text_sanitizer import safe_print, sanitize_output_text
 
 ROLE_GROUPS = {
     "成長・攻撃": ["VT", "BTC"], "景気後退防衛": ["TLT", "BNDX"], "インフレ防衛": ["TIP", "DBC", "GLDM"],
@@ -69,7 +70,7 @@ def _injury_type(audit_engine: str, wound_level: int) -> str:
 
 def _one_line_summary(text: str, injury_type: str) -> str:
     """詳細なproxy理由文を統合報告書用の一行へ縮約する。"""
-    cleaned = " ".join(text.split()).strip(" ;")
+    cleaned = " ".join(sanitize_output_text(text).split()).strip(" ;")
     if not cleaned:
         return "追加買い機会を継続確認" if injury_type in {"機会判定", "追加買い判定"} else "継続監査対象"
     # 診断ログの列挙はasset report側に残し、統合報告書では先頭の論点だけを示す。
@@ -257,9 +258,9 @@ def _demo(scenario: str = "default") -> int:
     filename = "el_shaddai_integrated_audit_report.md" if scenario == "default" else f"el_shaddai_integrated_audit_{scenario}.md"
     path = Path("artifacts/demo") / filename
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(result["report_text"], encoding="utf-8")
-    print(result["report_text"], end="")
-    print(f"保存先: {path}")
+    path.write_text(sanitize_output_text(result["report_text"]), encoding="utf-8")
+    safe_print(result["report_text"], end="")
+    safe_print(f"保存先: {path}")
     return 0
 
 
