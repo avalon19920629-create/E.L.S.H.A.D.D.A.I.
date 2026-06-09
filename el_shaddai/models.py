@@ -54,3 +54,4 @@ class MarketContext:
     btc_divergence_note: str = ""
     market_narratives: list[str] = field(default_factory=list)
     btc_sensor_summary: str = ""
+    air_mass_measure: str = "strength"

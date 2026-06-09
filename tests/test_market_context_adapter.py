@@ -31,6 +31,7 @@ def test_observed_market_flags_and_adjustments_are_safe_and_japanese():
 def test_market_context_preserves_observed_air_masses_signed_flows_and_btc_divergence():
     context = adapt_market_context(observed_market())
     assert context.air_mass_ratios == {"利回り気団": 50.2, "成長気団": 44.7, "防衛気団": 4.4, "インフレ気団": 0.7}
+    assert context.air_mass_measure == "ratio"
     assert context.top_updrafts[:5] == [
         {"name": "バリュー", "observed_value": 0.48}, {"name": "ナスダック", "observed_value": 0.41},
         {"name": "高配当", "observed_value": 0.37}, {"name": "REIT", "observed_value": 0.36}, {"name": "米国株", "observed_value": 0.33},
@@ -41,3 +42,11 @@ def test_market_context_preserves_observed_air_masses_signed_flows_and_btc_diver
     ]
     assert "成長気団が強い中で下降流" in context.btc_divergence_note
     assert context.btc_sensor_summary == "デジタルゴールド (Summer) モード"
+
+
+def test_independent_air_mass_scores_are_identified_as_strengths():
+    market = MarketAmedasInput({"yield": 60, "growth": 70, "defense": 35, "inflation": 45}, {}, {}, {})
+    context = adapt_market_context(market)
+
+    assert context.air_mass_measure == "strength"
+    assert "60.0 / 100" in context.market_narratives[0]

@@ -12,6 +12,7 @@ from .config import PERMANENT_ASSETS
 from .oracle_adapter import OracleResult
 from .report import role_display
 from .scoring import AssetScore, ranking
+from .text_sanitizer import sanitize_output_text
 
 NEUTRAL_ROLE_WARNING = "Role proxy inputs are neutral placeholders. This dashboard is not yet an operational role audit."
 
@@ -197,5 +198,5 @@ summary {{ cursor: pointer; font-weight: 600; }}
 {''.join(points)}
 </svg></section>
 </body></html>"""
-    path.write_text(html, encoding="utf-8")
+    path.write_text(sanitize_output_text(html), encoding="utf-8")
     return path

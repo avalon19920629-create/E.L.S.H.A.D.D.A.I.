@@ -57,7 +57,9 @@ def adapt_market_context(market: MarketAmedasInput | None) -> MarketContext:
 
     raw_air = {key: float(market.air_mass.get(key, 0.5)) for key in AIR_MASS_LABELS_JA}
     # 合計が百分率スケールなら 0.7 も 0.7% と解釈し、入力観測値をそのまま保持する。
+    raw_total = sum(raw_air.values())
     percentage_scale = sum(abs(value) for value in raw_air.values()) > 4.0
+    is_composition = abs(raw_total - (100.0 if percentage_scale else 1.0)) <= (0.5 if percentage_scale else 0.005)
     air = {key: max(0.0, min(1.0, value / 100 if percentage_scale else value)) for key, value in raw_air.items()}
     observed_ratios = {AIR_MASS_LABELS_JA[key]: round(value if percentage_scale else value * 100, 1) for key, value in raw_air.items()}
     leaders = sorted(air, key=air.get, reverse=True)[:2]
@@ -101,9 +103,10 @@ def adapt_market_context(market: MarketAmedasInput | None) -> MarketContext:
     if "gold_commodity_weakness" in flags:
         notes["GLDM・DBC"] = "金・商品は下降流。弱さが局面不適合か役割劣化かを次回監査で確認する。"
 
+    value_suffix = "%" if is_composition else " / 100"
     narratives = [
-        f"利回り気団 {observed_ratios['利回り気団']:.1f}% と成長気団 {observed_ratios['成長気団']:.1f}% が市場を主導している。",
-        f"防衛気団 {observed_ratios['防衛気団']:.1f}% とインフレ気団 {observed_ratios['インフレ気団']:.1f}% は非常に弱く、現在は防衛資産・インフレ防衛資産の出番が少ない局面である。",
+        f"利回り気団 {observed_ratios['利回り気団']:.1f}{value_suffix} と成長気団 {observed_ratios['成長気団']:.1f}{value_suffix} が市場を主導している。",
+        f"防衛気団 {observed_ratios['防衛気団']:.1f}{value_suffix} とインフレ気団 {observed_ratios['インフレ気団']:.1f}{value_suffix} は非常に弱く、現在は防衛資産・インフレ防衛資産の出番が少ない局面である。",
     ]
     conditions = []
     if "usd_wind_calm" in flags: conditions.append("米ドルは凪で、強いドル逆風は出ていない")
@@ -112,4 +115,4 @@ def adapt_market_context(market: MarketAmedasInput | None) -> MarketContext:
     if conditions: narratives.append("。".join(conditions) + "。")
     flag_summary = "、".join(MARKET_CONTEXT_FLAG_LABELS_JA[flag] for flag in flags) if flags else "顕著な気象フラグなし"
     summary = f"Market Amedas市場文脈：{flag_summary}。市場気象は売却判断に直結させない。"
-    return MarketContext(summary, flags, priority, adjustments, notes, observed_ratios, strengths, _top_flows(market.updrafts, descending=True), _top_flows(market.downdrafts, descending=False), btc_note, narratives, market.btc_sensor or "入力なし")
+    return MarketContext(summary, flags, priority, adjustments, notes, observed_ratios, strengths, _top_flows(market.updrafts, descending=True), _top_flows(market.downdrafts, descending=False), btc_note, narratives, market.btc_sensor or "入力なし", "ratio" if is_composition else "strength")

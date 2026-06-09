@@ -12,6 +12,7 @@ from .labels import ACTION_LABELS_JA, CONFIDENCE_LABELS_JA, GLOBAL_JUDGMENT_LABE
 from .market_context_adapter import adapt_market_context
 from .models import AssetAuditInput, MarketAmedasInput, PortfolioInput
 from .report_renderer import render_integrated_report
+from .text_sanitizer import safe_print, sanitize_output_text
 
 ROLE_GROUPS = {
     "成長・攻撃": ["VT", "BTC"], "景気後退防衛": ["TLT", "BNDX"], "インフレ防衛": ["TIP", "DBC", "GLDM"],
@@ -60,6 +61,38 @@ def classify_wound(score: float, risk_flags: Iterable[str], explicit: int | None
     return 3
 
 
+def _injury_type(audit_engine: str, wound_level: int) -> str:
+    """統合報告書向けに、O.R.A.C.L.E.の機会判定と役割負傷を分離する。"""
+    if audit_engine == "O.R.A.C.L.E.":
+        return "追加買い判定" if wound_level > 0 else "機会判定"
+    return {0: "負傷なし", 1: "価格負傷", 2: "役割負傷", 3: "構造負傷"}[wound_level]
+
+
+def _one_line_summary(text: str, injury_type: str) -> str:
+    """詳細なproxy理由文を統合報告書用の一行へ縮約する。"""
+    cleaned = " ".join(sanitize_output_text(text).split()).strip(" ;")
+    if not cleaned:
+        return "追加買い機会を継続確認" if injury_type in {"機会判定", "追加買い判定"} else "継続監査対象"
+    # 診断ログの列挙はasset report側に残し、統合報告書では先頭の論点だけを示す。
+    summary = cleaned.split(";", 1)[0].split("。", 1)[0]
+    return summary if len(summary) <= 72 else summary[:69].rstrip() + "..."
+
+
+def _display_status(audit_engine: str, wound_level: int, health_label: str) -> str:
+    """O.R.A.C.L.E.の機会評価を、役割健全度ラベルから表示上分離する。"""
+    if audit_engine == "O.R.A.C.L.E.":
+        return "追加買い候補" if wound_level > 0 else "機会中立"
+    return health_label
+
+
+def _recommended_action(injury_type: str) -> str:
+    if injury_type == "追加買い判定":
+        return "既存ルール内で追加買い機会を確認"
+    if injury_type in {"価格負傷", "役割負傷", "構造負傷"}:
+        return "次回監査で重点確認"
+    return "固定比率と既存ルールを維持"
+
+
 def _correlation_integrity(audits: list[AssetAuditInput]) -> tuple[float, bool]:
     values = [float(a.supporting_metrics["correlation_integrity_score"]) for a in audits if "correlation_integrity_score" in a.supporting_metrics]
     return (clamp(mean(values)), True) if values else (100.0, False)
@@ -92,11 +125,13 @@ def run_integrated_audit(asset_audits: Iterable[AssetAuditInput], portfolio: Por
         level = health_level_for(score)
         # 市場気象や低信頼だけでは負傷としない。負傷は役割証拠と構造フラグで判定する。
         wound = classify_wound(role_evidence_score, audit.risk_flags, audit.wound_level)
+        injury_type = _injury_type(audit.audit_engine, wound)
         rows.append({
             "asset": audit.asset, "audit_engine": audit.audit_engine, "asset_health_score": score, "internal_health_score": internal_score, "role_evidence_score": role_evidence_score, "health_level": level,
-            "health_label": HEALTH_LABELS_JA[level], "wound_level": wound, "wound_label": WOUND_TYPE_LABELS_JA[wound],
+            "health_label": HEALTH_LABELS_JA[level], "display_status": _display_status(audit.audit_engine, wound, HEALTH_LABELS_JA[level]), "wound_level": wound, "wound_label": WOUND_TYPE_LABELS_JA[wound], "injury_type": injury_type,
             "confidence_level": confidence_level, "confidence_label": CONFIDENCE_LABELS_JA[confidence_level],
-            "diagnosis_summary": audit.diagnosis_summary, "risk_flags": list(audit.risk_flags), "multipliers": {"regime_relevance": regime, "confidence": confidence_multiplier(audit.confidence_level), "penalty": penalty},
+            "diagnosis_summary": audit.diagnosis_summary, "one_line_summary": _one_line_summary(audit.diagnosis_summary, injury_type), "recommended_action": _recommended_action(injury_type),
+            "risk_flags": list(audit.risk_flags), "multipliers": {"regime_relevance": regime, "confidence": confidence_multiplier(audit.confidence_level), "penalty": penalty},
         })
     rows.sort(key=lambda row: row["asset_health_score"], reverse=True)
     wounded = [row for row in rows if row["wound_level"] > 0]
@@ -174,13 +209,22 @@ def run_integrated_audit(asset_audits: Iterable[AssetAuditInput], portfolio: Por
     if "gold_commodity_weakness" in context.market_context_flags: checkpoints.append("GLDM・DBCの弱さが局面不適合か、役割劣化かを確認する。")
     if not correlation_available: checkpoints.append("VT/TLT、VT/GLDM、VT/BTCの相関構造を確認する。")
 
+    injury_breakdown: dict[str, int] = {}
+    for row in wounded:
+        injury_breakdown[row["injury_type"]] = injury_breakdown.get(row["injury_type"], 0) + 1
+    opening_caveats = []
+    if market_amedas is None:
+        opening_caveats.append("市場文脈補正なし")
+    if not correlation_available:
+        opening_caveats.append("危機時分散評価なし")
+
     result: dict[str, Any] = {
         "sanctuary_health_score": sanctuary, "internal_sanctuary_health_score": internal_sanctuary, "global_judgment_level": global_level, "global_judgment_label": GLOBAL_JUDGMENT_LABELS_JA[global_level],
         "lumus_global_judgment": {"level": global_level, "label": GLOBAL_JUDGMENT_LABELS_JA[global_level]},
         "contextual_action_candidate_level": contextual_action_candidate, "internal_action_level": internal_action,
         "raw_action_level": raw_action, "action_level": action, "action_label": ACTION_LABELS_JA[action],
         "portfolio_adjustment_recommendation": {"level": action, "label": ACTION_LABELS_JA[action], "advisory_only": True},
-        "hysteresis_note": hysteresis_note, "market_context_safety_note": market_context_safety_note, "asset_health_rank": rows, "wounded_assets": wounded, "role_group_diagnosis": role_group_diagnosis,
+        "hysteresis_note": hysteresis_note, "market_context_safety_note": market_context_safety_note, "asset_health_rank": rows, "wounded_assets": wounded, "injury_breakdown": injury_breakdown, "opening_caveats": opening_caveats, "role_group_diagnosis": role_group_diagnosis,
         "market_context": asdict(context), "market_context_summary": context.market_context_summary,
         "recommended_actions": recommended, "not_recommended_actions": not_recommended, "next_checkpoints": checkpoints,
         "correlation_integrity_score": correlation_score if correlation_available else None,
@@ -214,9 +258,9 @@ def _demo(scenario: str = "default") -> int:
     filename = "el_shaddai_integrated_audit_report.md" if scenario == "default" else f"el_shaddai_integrated_audit_{scenario}.md"
     path = Path("artifacts/demo") / filename
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(result["report_text"], encoding="utf-8")
-    print(result["report_text"], end="")
-    print(f"保存先: {path}")
+    path.write_text(sanitize_output_text(result["report_text"]), encoding="utf-8")
+    safe_print(result["report_text"], end="")
+    safe_print(f"保存先: {path}")
     return 0
 
 
