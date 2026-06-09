@@ -64,13 +64,25 @@ def write_markdown(
         "",
         "## Asset Scores",
         "",
-        "| asset | price_score | role_score | el_shaddai_score | label | main_reason | data_date |",
-        "| --- | ---: | ---: | ---: | --- | --- | --- |",
+        "| asset | price_score | role_score | el_shaddai_score | status | label | main_reason | data_date |",
+        "| --- | ---: | ---: | ---: | --- | --- | --- | --- |",
     ]
+    fred_results = {"TLT": lode_result, "TIP": inferno_result}
+    degraded_assets = [asset for asset, result in fred_results.items() if result is not None and result.degraded]
+    failed_adapters = [
+        asset for asset, result in fred_results.items()
+        if result is not None and result.degraded
+        and not getattr(result, "used_lode", getattr(result, "used_inferno", True))
+    ]
+    lines.insert(4, f"Failed adapters: {', '.join(failed_adapters) if failed_adapters else 'none'}")
+    lines.insert(4, f"Degraded assets: {', '.join(degraded_assets) if degraded_assets else 'none'}")
     for score in scores:
+        adapter = fred_results.get(score.asset)
+        failed = score.asset in failed_adapters
+        status = "degraded-neutral" if failed else ("degraded-cache" if adapter is not None and adapter.degraded else "normal")
         lines.append(
             f"| {score.asset} | {score.price_score:.2f} | {role_display(score.role_score)} | "
-            f"{score.el_shaddai_score:.2f} | {score.label} | {score.main_reason} | {score.data_date} |"
+            f"{score.el_shaddai_score:.2f} | {status} | {score.label} | {score.main_reason} | {score.data_date} |"
         )
 
     lines.extend(["", "## Role Component Weights", "", "| asset | component | weight | group |", "| --- | --- | ---: | --- |"])
@@ -119,6 +131,9 @@ def write_markdown(
         lines.append(f"Source: {lode_result.source}")
         lines.append(f"Data date: {lode_result.data_date}")
         lines.append(f"Used L.O.D.E. data: {lode_result.used_lode}")
+        lines.append(f"Degraded: {lode_result.degraded}")
+        lines.append(f"Stale days: {lode_result.stale_days if lode_result.stale_days is not None else 'N/A'}")
+        lines.append(f"Failed adapter: {lode_result.degraded and not lode_result.used_lode}")
         if lode_result.warnings:
             lines.extend(["", "Warnings:"])
             lines.extend(f"- {warning}" for warning in lode_result.warnings)
@@ -131,6 +146,9 @@ def write_markdown(
         lines.append(f"Source: {inferno_result.source}")
         lines.append(f"Data date: {inferno_result.data_date}")
         lines.append(f"Used I.N.F.E.R.N.O. data: {inferno_result.used_inferno}")
+        lines.append(f"Degraded: {inferno_result.degraded}")
+        lines.append(f"Stale days: {inferno_result.stale_days if inferno_result.stale_days is not None else 'N/A'}")
+        lines.append(f"Failed adapter: {inferno_result.degraded and not inferno_result.used_inferno}")
         lines.append(f"Inflation regime interpretation: {inferno_result.inflation_regime_interpretation}")
         tip_score = next((score for score in scores if score.asset == "TIP"), None)
         inferno_caps = list(inferno_result.applied_caps)

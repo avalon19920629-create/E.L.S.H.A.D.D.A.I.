@@ -9,14 +9,15 @@ role as recession cushion / long-duration Treasury exposure / equity hedge.
 from __future__ import annotations
 
 import csv
-import io
-import urllib.parse
-import urllib.request
 from dataclasses import dataclass
 from datetime import date, timedelta
 from typing import Dict, Iterable, List, Mapping, Optional, Sequence
 
 from .config import DEFAULT_ROLE_INPUTS
+from .fred_data import (
+    DEFAULT_FRED_PAUSE, DEFAULT_FRED_RETRY_COUNT, DEFAULT_FRED_TIMEOUT,
+    fetch_fred_series_rows, load_fred_cache, save_fred_cache,
+)
 
 FRED_SERIES: Mapping[str, str] = {
     "T10Y2Y": "10-Year Treasury Constant Maturity Minus 2-Year Treasury Constant Maturity",
@@ -51,6 +52,8 @@ class LodeResult:
     data_date: str
     source: str
     used_lode: bool
+    degraded: bool = False
+    stale_days: Optional[int] = None
 
 
 def _to_float(value: str) -> Optional[float]:
@@ -91,46 +94,15 @@ def _trend(values: Sequence[float], lookback: int = 252) -> float:
     return clean[-1] - previous
 
 
-def _fred_csv_url(series_id: str, start: str, end: str) -> str:
-    params = urllib.parse.urlencode({"id": series_id, "cosd": start, "coed": end})
-    return f"https://fred.stlouisfed.org/graph/fredgraph.csv?{params}"
-
-
-def _fetch_one_series(series_id: str, start: str, end: str) -> Dict[str, Optional[float]]:
-    url = _fred_csv_url(series_id, start, end)
-    with urllib.request.urlopen(url, timeout=20) as response:
-        text = response.read().decode("utf-8")
-    rows: Dict[str, Optional[float]] = {}
-    for row in csv.DictReader(io.StringIO(text)):
-        rows[row["observation_date"]] = _to_float(row[series_id])
-    return rows
-
-
-def fetch_lode_fred_data(start: str | date | None = None, end: str | date | None = None) -> List[Dict[str, float | str | None]]:
-    """Fetch required L.O.D.E. FRED series and return forward-filled rows.
-
-    The function uses FRED's public CSV endpoint and intentionally avoids a hard
-    dependency on pandas/pandas-datareader so the CLI can still run in minimal
-    Python environments.
-    """
-
+def fetch_lode_fred_data(
+    start: str | date | None = None, end: str | date | None = None, *,
+    retry_count: int = DEFAULT_FRED_RETRY_COUNT, pause: float = DEFAULT_FRED_PAUSE,
+    timeout: float = DEFAULT_FRED_TIMEOUT, provider: str = "pandas_datareader",
+) -> List[Dict[str, float | str | None]]:
+    """Fetch required L.O.D.E. series through the shared FRED foundation."""
     end_date = end or date.today()
     start_date = start or (date.today() - timedelta(days=365 * 20))
-    start_text = start_date.isoformat() if isinstance(start_date, date) else str(start_date)
-    end_text = end_date.isoformat() if isinstance(end_date, date) else str(end_date)
-
-    series_data = {series_id: _fetch_one_series(series_id, start_text, end_text) for series_id in FRED_SERIES}
-    all_dates = sorted({row_date for values in series_data.values() for row_date in values})
-    latest_values: Dict[str, Optional[float]] = {series_id: None for series_id in FRED_SERIES}
-    rows: List[Dict[str, float | str | None]] = []
-    for row_date in all_dates:
-        row: Dict[str, float | str | None] = {"date": row_date}
-        for series_id, observations in series_data.items():
-            if row_date in observations and observations[row_date] is not None:
-                latest_values[series_id] = observations[row_date]
-            row[series_id] = latest_values[series_id]
-        rows.append(row)
-    return rows
+    return fetch_fred_series_rows(list(FRED_SERIES), start_date, end_date, retry_count=retry_count, pause=pause, timeout=timeout, provider=provider)
 
 
 def compute_lode_components(df: Iterable[Mapping[str, float | str | None]]) -> List[Dict[str, float | str]]:
@@ -257,20 +229,29 @@ def tlt_role_inputs_from_csv(path: str) -> LodeResult:
     return LodeResult(result.role_inputs, result.proxies, result.reasons, result.warnings, result.data_date, f"manual L.O.D.E. CSV: {path}", False)
 
 
-def latest_tlt_role_inputs(start: str | date | None = None, end: str | date | None = None) -> LodeResult:
-    """Fetch FRED data and return latest TLT Role proxy inputs.
-
-    Any FRED/network/parsing failure returns neutral TLT inputs and a warning so
-    the El Shaddai CLI can continue to produce auditable reports.
-    """
-
+def latest_tlt_role_inputs(
+    start: str | date | None = None, end: str | date | None = None, *,
+    retry_count: int = DEFAULT_FRED_RETRY_COUNT, pause: float = DEFAULT_FRED_PAUSE,
+    timeout: float = DEFAULT_FRED_TIMEOUT, cache_dir: str | None = None,
+    fred_provider: str = "pandas_datareader",
+) -> LodeResult:
+    """Use live FRED, then last-successful cache, then neutral fallback."""
     try:
-        rows = fetch_lode_fred_data(start, end)
+        rows = fetch_lode_fred_data(start, end, retry_count=retry_count, pause=pause, timeout=timeout, provider=fred_provider)
         result = compute_tlt_role_proxies(rows)
-        if result.used_lode:
-            return result
+        if result.used_lode and cache_dir:
+            save_fred_cache(cache_dir, "lode", rows)
         return result
-    except Exception as exc:  # noqa: BLE001 - CLI must not fail on data-provider issues.
+    except Exception as exc:  # noqa: BLE001 - provider failure must not stop an audit.
+        if cache_dir:
+            try:
+                rows, stale_days, path = load_fred_cache(cache_dir, "lode")
+                result = compute_tlt_role_proxies(rows)
+                if result.used_lode:
+                    warning = f"warning: live L.O.D.E. FRED fetch failed ({exc}); using last successful cache {path} ({stale_days} stale days)."
+                    return LodeResult(result.role_inputs, result.proxies, result.reasons, result.warnings + [warning], result.data_date, "cache", True, True, stale_days)
+            except Exception:
+                pass
         neutral = {name: float(DEFAULT_ROLE_INPUTS["TLT"].get(name, 0.0)) for name in TLT_LODE_COMPONENTS}
-        warning = f"warning: failed to fetch L.O.D.E. FRED data ({exc}); neutral TLT Role proxy fallback applied."
-        return LodeResult({"TLT": neutral}, neutral, {}, [warning], "unknown", "L.O.D.E. FRED", False)
+        warning = f"warning: failed to fetch L.O.D.E. FRED data ({exc}); no usable cache; neutral TLT Role proxy fallback applied."
+        return LodeResult({"TLT": neutral}, neutral, {}, [warning], "unknown", "L.O.D.E. FRED", False, True, None)

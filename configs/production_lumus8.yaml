@@ -3,6 +3,14 @@ version: 1
 price_data:
   provider: yfinance
   period: 5y
+fred:
+  # Keyless FredReader is the default; set provider: fredapi and FRED_API_KEY only when desired.
+  provider: pandas_datareader
+  retry_count: 3
+  pause: 1.0
+  timeout: 60
+  # Colab example: /content/drive/MyDrive/el_shaddai/fred_cache
+  cache_dir: null
 role_adapters:
   enabled: [BNDX, TLT, TIP, GLDM, XLRE, DBC]
 oracle:

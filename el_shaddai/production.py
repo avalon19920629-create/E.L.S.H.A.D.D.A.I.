@@ -40,6 +40,11 @@ class ProductionConfig:
     target_weights: Mapping[str, float]
     enabled_role_adapters: tuple[str, ...]
     use_oracle: bool
+    fred_retry_count: int = 3
+    fred_pause: float = 1.0
+    fred_timeout: float = 60.0
+    fred_cache_dir: str | None = None
+    fred_provider: str = "pandas_datareader"
 
 
 def load_production_config(path: str | Path) -> ProductionConfig:
@@ -62,11 +67,20 @@ def load_production_config(path: str | Path) -> ProductionConfig:
     unknown = set(enabled) - set(ROLE_ADAPTERS)
     if unknown:
         raise ValueError(f"未対応の role adapter: {', '.join(sorted(unknown))}")
+    fred = raw.get("fred", {})
+    provider = str(fred.get("provider", "pandas_datareader"))
+    if provider not in {"pandas_datareader", "fredapi"}:
+        raise ValueError("fred.provider は pandas_datareader または fredapi のみサポートします")
     return ProductionConfig(
         price_period=str(price_data.get("period", "5y")),
         target_weights=normalized,
         enabled_role_adapters=enabled,
         use_oracle=bool(raw.get("oracle", {}).get("enabled", True)),
+        fred_retry_count=int(fred.get("retry_count", 3)),
+        fred_pause=float(fred.get("pause", 1.0)),
+        fred_timeout=float(fred.get("timeout", 60)),
+        fred_cache_dir=fred.get("cache_dir"),
+        fred_provider=provider,
     )
 
 
@@ -111,6 +125,14 @@ def _asset_audits(scores: list[AssetScore]) -> list[AssetAuditInput]:
     ]
 
 
+def _adapter_succeeded(result: Any) -> bool:
+    """Return whether a role adapter produced non-neutral adapter data."""
+    for attribute in ("used_lode", "used_inferno"):
+        if hasattr(result, attribute):
+            return bool(getattr(result, attribute))
+    return True
+
+
 def run_production(config_path: str | Path, output_dir: str | Path) -> dict[str, Path]:
     """ライブデータ監査を1回実行し、指定ディレクトリへ監査成果物を保存する。"""
     config = load_production_config(config_path)
@@ -122,7 +144,13 @@ def run_production(config_path: str | Path, output_dir: str | Path) -> dict[str,
     adapter_results: dict[str, Any] = {}
     warnings: list[str] = []
     for asset in config.enabled_role_adapters:
-        result = ROLE_ADAPTERS[asset]()
+        if asset in {"TLT", "TIP"}:
+            result = ROLE_ADAPTERS[asset](
+                retry_count=config.fred_retry_count, pause=config.fred_pause, timeout=config.fred_timeout,
+                cache_dir=config.fred_cache_dir or str(destination / "fred_cache"), fred_provider=config.fred_provider,
+            )
+        else:
+            result = ROLE_ADAPTERS[asset]()
         adapter_results[asset] = result
         role_inputs[asset] = dict(result.role_inputs[asset])
         warnings.extend(result.warnings)
@@ -163,6 +191,15 @@ def run_production(config_path: str | Path, output_dir: str | Path) -> dict[str,
         "config": asdict(config),
         "output_dir": str(destination),
         "warnings": warnings,
+        "degraded_assets": [asset for asset, result in adapter_results.items() if getattr(result, "degraded", False)],
+        "failed_adapters": [
+            asset for asset, result in adapter_results.items()
+            if getattr(result, "degraded", False) and not _adapter_succeeded(result)
+        ],
+        "adapter_status": {asset: {
+            "source": result.source, "degraded": getattr(result, "degraded", False),
+            "stale_days": getattr(result, "stale_days", None),
+        } for asset, result in adapter_results.items()},
         "artifacts": {name: str(path) for name, path in paths.items()},
         "safety": {"advisory_only": True, "automatic_trading": False, "continuous_monitoring": False},
     }, ensure_ascii=False, indent=2), encoding="utf-8")
