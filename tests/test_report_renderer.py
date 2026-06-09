@@ -54,3 +54,33 @@ def test_market_scenario_summary_and_recommendations_are_specific():
     assert "低スコア資産を機械的に売却しない" in report
     assert "市場文脈だけでは負傷扱いにしない" in report
     assert "自動売買を実行しない" in report
+
+
+def test_report_opens_with_conclusion_caveats_breakdown_and_knights_table():
+    names = (("VT", "O.R.A.C.L.E."), ("BTC", "O.R.A.C.L.E."), ("TLT", "L.O.D.E."), ("TIP", "I.N.F.E.R.N.O."), ("GLDM", "A.U.R.A."), ("XLRE", "A.R.C.A.D.I.A."), ("BNDX", "A.T.L.A.S."), ("DBC", "G.A.I.A."))
+    audits = [AssetAuditInput(a, e, 20, diagnosis_summary="proxy reason with many details; second detail that belongs in the asset report") for a, e in names]
+    result = run_integrated_audit(audits, PortfolioInput({a: 0.125 for a, _ in names}))
+    report = result["report_text"]
+
+    assert report.index("【結論サマリー】") < report.index("【総合診断】")
+    assert "負傷アセットは8件（内訳：追加買い判定 2件、構造負傷 6件）" in report
+    assert "市場文脈補正なし" in report
+    assert "危機時分散評価なし" in report
+    assert "| asset | adapter | score | status | injury_type | one_line_summary | recommended_action |" in report
+    assert "second detail that belongs in the asset report" not in report
+    assert "詳細なproxy理由・指標値は詳細ログおよびasset reportを参照する。" in report
+
+
+def test_oracle_assets_are_displayed_as_opportunity_judgments_not_role_injuries():
+    inputs = [
+        AssetAuditInput("VT", "O.R.A.C.L.E.", 50, wound_level=2),
+        AssetAuditInput("BTC", "O.R.A.C.L.E.", 80),
+        AssetAuditInput("TLT", "L.O.D.E.", 50, wound_level=2),
+    ]
+    result = run_integrated_audit(inputs, PortfolioInput({"VT": 1 / 3, "BTC": 1 / 3, "TLT": 1 / 3}))
+    by_asset = {row["asset"]: row for row in result["asset_health_rank"]}
+
+    assert by_asset["VT"]["injury_type"] == "追加買い判定"
+    assert by_asset["BTC"]["injury_type"] == "機会判定"
+    assert by_asset["TLT"]["injury_type"] == "役割負傷"
+    assert "VT：役割負傷" not in result["report_text"]
