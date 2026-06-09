@@ -663,3 +663,16 @@ python -m el_shaddai.integrated_audit --demo --scenario market_amedas_20260606
 生成される報告書は `artifacts/demo/el_shaddai_integrated_audit_market_amedas_20260606.md` に保存されます。報告書の保存・表示前には端末UI由来の `:codex-terminal-citation[...]` メタ文字列を除去します。
 
 `market_amedas_20260606` は、利回り気団 50.2%、成長気団 44.7%、防衛気団 4.4%、インフレ気団 0.7% の観測比率と、符号付きの上昇流・下降流実測値を使用します。観測値は表示用に保持し、市場文脈補正は従来どおり資産健全度側に限定して、負傷判定には使用しません。
+
+## Google Colab向け最小production実行
+
+`run_el_shaddai_production.py` は、demo modeに依存せず、ライブ価格データと既存adapterを使ってL.U.M.U.S.-8の単発・助言専用監査を実行するproduction入口です。`--output-dir` にGoogle Driveのmount先を渡すと、資産別レポート、統合監査レポート、HTML、CSV、実行manifestをそのディレクトリへ保存します。価格履歴が欠損した場合は、production実行ではbuilt-in sampleへフォールバックせず終了します。
+
+```bash
+python -m pip install -r requirements.txt
+python run_el_shaddai_production.py \
+  --config configs/production_lumus8.yaml \
+  --output-dir /content/drive/MyDrive/el_shaddai/production_reports
+```
+
+設定例は `configs/production_lumus8.yaml`、Google Driveのmountを含むColab手順、生成物、警告確認、障害時の扱いは [`PRODUCTION_RUNBOOK.md`](PRODUCTION_RUNBOOK.md) を参照してください。この入口は自動売買・注文執行・常時監視を行いません。

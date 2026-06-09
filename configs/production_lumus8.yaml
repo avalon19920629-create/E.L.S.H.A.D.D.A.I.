@@ -1,0 +1,20 @@
+# El Shaddai / L.U.M.U.S.-8: one-shot, advisory-only production audit.
+version: 1
+price_data:
+  provider: yfinance
+  period: 5y
+role_adapters:
+  enabled: [BNDX, TLT, TIP, GLDM, XLRE, DBC]
+oracle:
+  enabled: true
+portfolio:
+  # Replace these example target weights with the approved portfolio policy.
+  target_weights:
+    VT: 0.40
+    BTC: 0.05
+    BNDX: 0.10
+    TLT: 0.10
+    TIP: 0.10
+    GLDM: 0.10
+    XLRE: 0.075
+    DBC: 0.075

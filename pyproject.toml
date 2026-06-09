@@ -13,6 +13,7 @@ data = [
   "yfinance",
   "pandas",
   "requests",
+  "PyYAML",
 ]
 
 [tool.setuptools.packages.find]
