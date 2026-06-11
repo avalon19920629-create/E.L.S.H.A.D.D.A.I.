@@ -8,7 +8,7 @@ from .market_context_adapter import MARKET_CONTEXT_FLAG_LABELS_JA
 from .text_sanitizer import sanitize_output_text
 
 REQUIRED_SECTIONS = (
-    "結論サマリー", "データ完全性", "注意点", "総合診断", "要約", "今回推奨する行動", "今回推奨しない行動", "八騎士 健全度順位", "負傷アセット",
+    "結論サマリー", "データ完全性", "注意点", "総合診断", "要約", "今回推奨する行動", "今回推奨しない行動", "八騎士 健全度順位", "負傷アセット", "機会判定",
     "役割グループ診断", "市場文脈", "相関構造診断", "次回監査で確認すること", "最終メッセージ",
 )
 
@@ -52,12 +52,16 @@ def sanitize_report_text(text: str) -> str:
 def render_integrated_report(result: Mapping[str, Any]) -> str:
     """構造化監査結果を、日本語の運用監査報告書として描画する。"""
     wounded = len(result["wounded_assets"])
+    opportunities = len(result.get("opportunity_judgments", []))
+    degraded = len(result["data_completeness"]["degraded_adapters"])
+    failed = len(result["data_completeness"]["failed_adapters"])
     breakdown = _injury_breakdown_text(result)
     lines = [
         "=" * 60, "EL SHADDAI 統合監査報告書 v2.0", "=" * 60, "",
         "【結論サマリー】",
         f"総合状態：{result['global_judgment_label']} / 推奨運用判断：{result['action_label']}（助言のみ・自動売買なし）",
         f"負傷アセットは{wounded}件（内訳：{breakdown}）。",
+        f"機会判定は{opportunities}件 / degraded adaptersは{degraded}件 / failed adaptersは{failed}件。",
         "低スコアは自動売却を意味しない。固定比率と既存の乖離ルールを優先する。",
         "", *_data_completeness_lines(result),
         "", "【注意点】", *_bullets(result.get("opening_caveats", [])),
@@ -71,7 +75,10 @@ def render_integrated_report(result: Mapping[str, Any]) -> str:
         lines.append(f"継続判定：{result['hysteresis_note']}")
 
     watch_groups = [group for group, diagnosis in result["role_group_diagnosis"].items() if diagnosis["level"] <= 3]
-    summary = [f"L.U.M.U.S.-8の総合状態を監査し、負傷アセットは{wounded}件（内訳：{breakdown}）と判定した。"]
+    summary = [
+        f"L.U.M.U.S.-8の総合状態を監査し、負傷アセットは{wounded}件（内訳：{breakdown}）、機会判定は{opportunities}件と判定した。",
+        f"データ接続状態は degraded adapters {degraded}件、failed adapters {failed}件。",
+    ]
     if not wounded and watch_groups:
         summary.append(f"個別アセットに明確な役割負傷はないが、{'・'.join(watch_groups)}グループは相対的に弱く、次回監査で確認する。")
     summary.append("低スコアは自動売却を意味しない。固定比率と既存の乖離ルールを優先する。")
@@ -98,6 +105,13 @@ def render_integrated_report(result: Mapping[str, Any]) -> str:
         for asset in result["wounded_assets"]:
             lines.append(f"・{asset['asset']}：{asset['injury_type']} / {asset['one_line_summary']} / {asset['recommended_action']}")
     lines.append("詳細なproxy理由・指標値は詳細ログおよびasset reportを参照する。")
+
+    lines += ["", "【機会判定】", f"判定件数：{opportunities}件"]
+    if not result.get("opportunity_judgments"):
+        lines.append("・O.R.A.C.L.E.による機会判定なし。")
+    else:
+        for asset in result["opportunity_judgments"]:
+            lines.append(f"・{asset['asset']}：{asset['injury_type']} / {asset['one_line_summary']} / {asset['recommended_action']}")
 
     lines += ["", "【役割グループ診断】"]
     for group, diagnosis in result["role_group_diagnosis"].items():

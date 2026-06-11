@@ -63,7 +63,8 @@ def test_report_opens_with_conclusion_caveats_breakdown_and_knights_table():
     report = result["report_text"]
 
     assert report.index("【結論サマリー】") < report.index("【総合診断】")
-    assert "負傷アセットは8件（内訳：追加買い判定 2件、構造負傷 6件）" in report
+    assert "負傷アセットは6件（内訳：構造負傷 6件）" in report
+    assert "機会判定は2件 / degraded adaptersは0件 / failed adaptersは0件" in report
     assert "市場文脈補正なし" in report
     assert "危機時分散評価なし" in report
     assert "| asset | adapter | score | status | injury_type | one_line_summary | recommended_action |" in report
@@ -88,6 +89,32 @@ def test_oracle_assets_are_displayed_as_opportunity_judgments_not_role_injuries(
     assert by_asset["TLT"]["display_status"] == by_asset["TLT"]["health_label"]
     assert "VT：役割負傷" not in result["report_text"]
     assert "| VT | O.R.A.C.L.E." in result["report_text"] and "| 追加買い候補 |" in result["report_text"]
+
+
+def test_oracle_opportunities_are_excluded_from_wounded_count_and_rendered_separately():
+    names = (("VT", "O.R.A.C.L.E."), ("BTC", "O.R.A.C.L.E."), ("TLT", "L.O.D.E."), ("TIP", "I.N.F.E.R.N.O."), ("GLDM", "A.U.R.A."), ("XLRE", "A.R.C.A.D.I.A."), ("BNDX", "A.T.L.A.S."), ("DBC", "G.A.I.A."))
+    result = run_integrated_audit(
+        [AssetAuditInput(asset, engine, 50, wound_level=2, diagnosis_summary=f"{engine.lower()}: value=50.00") for asset, engine in names],
+        PortfolioInput({asset: 0.125 for asset, _ in names}),
+        data_runtime={"degraded_assets": ["TLT"], "failed_adapters": ["TIP"]},
+    )
+    report = result["report_text"]
+    wounded_assets = {row["asset"] for row in result["wounded_assets"]}
+    opportunity_assets = {row["asset"] for row in result["opportunity_judgments"]}
+    wounded_section = report.split("【負傷アセット】", 1)[1].split("【機会判定】", 1)[0]
+    opportunity_section = report.split("【機会判定】", 1)[1].split("【役割グループ診断】", 1)[0]
+
+    assert wounded_assets == {"TLT", "TIP", "GLDM", "XLRE", "BNDX", "DBC"}
+    assert opportunity_assets == {"VT", "BTC"}
+    assert "負傷アセットは6件（内訳：役割負傷 6件）" in report
+    assert "機会判定は2件 / degraded adaptersは1件 / failed adaptersは1件" in report
+    assert "・VT：追加買い判定" not in wounded_section
+    assert "・BTC：追加買い判定" not in wounded_section
+    assert "・VT：追加買い判定 / o.r.a.c.l.e.: value=50.00 / 既存ルール内で追加買い機会を確認" in opportunity_section
+    assert "・BTC：追加買い判定 / o.r.a.c.l.e.: value=50.00 / 既存ルール内で追加買い機会を確認" in opportunity_section
+    assert all(f"・{asset}：役割負傷" in wounded_section for asset in wounded_assets)
+    assert "低スコアは自動売却を意味しない。固定比率と既存の乖離ルールを優先する。" in report
+    assert "自動売買を実行しない" in report
 
 
 def test_next_checkpoints_keep_oracle_opportunities_separate_from_real_wounds():
