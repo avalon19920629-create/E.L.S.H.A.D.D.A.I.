@@ -124,6 +124,7 @@ def render_integrated_report(result: Mapping[str, Any]) -> str:
     else:
         for asset in result["wounded_assets"]:
             lines.append(f"・{asset['asset']}：{asset['injury_type']} / {asset['one_line_summary']} / {asset['recommended_action']}")
+            lines.extend(f"  - {note}" for note in asset.get("interpretation_notes", []))
     lines.append("詳細なproxy理由・指標値は詳細ログおよびasset reportを参照する。")
 
     lines += ["", "【機会判定】", f"判定件数：{opportunities}件"]
