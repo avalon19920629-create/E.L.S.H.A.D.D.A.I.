@@ -29,6 +29,25 @@ def _asset_list(items: list[str]) -> str:
     return "、".join(items) if items else "なし"
 
 
+def _audit_integrity_lines(result: Mapping[str, Any]) -> list[str]:
+    completeness = result["data_completeness"]
+    reasons = completeness["audit_integrity_reasons"]
+    lines = [
+        f"監査完全性：{completeness['audit_integrity']}（{completeness['audit_context_status']}）",
+        f"データ接続：FRED {completeness['fred_data_status']} / degraded adapters {_asset_list(completeness['degraded_adapters'])} / failed adapters {_asset_list(completeness['failed_adapters'])}",
+    ]
+    if reasons:
+        lines += [
+            f"理由：{' / '.join(reasons)}",
+            f"今回の総合状態は、{'および'.join(reason.removesuffix('未入力') for reason in reasons)}が未入力のため、文脈未接続の暫定判定です。",
+            "総合状態と推奨運用判断は、文脈未接続の参考判定として確認してください。",
+            "暫定判定は自動売買・自動売却を意味しません。",
+        ]
+    else:
+        lines.append("Market Amedasおよび相関構造を接続した通常の統合監査です。")
+    return lines
+
+
 def _data_completeness_lines(result: Mapping[str, Any]) -> list[str]:
     completeness = result["data_completeness"]
     fred_provider = completeness.get("fred_provider")
@@ -59,6 +78,7 @@ def render_integrated_report(result: Mapping[str, Any]) -> str:
     lines = [
         "=" * 60, "EL SHADDAI 統合監査報告書 v2.0", "=" * 60, "",
         "【結論サマリー】",
+        *_audit_integrity_lines(result),
         f"総合状態：{result['global_judgment_label']} / 推奨運用判断：{result['action_label']}（助言のみ・自動売買なし）",
         f"負傷アセットは{wounded}件（内訳：{breakdown}）。",
         f"機会判定は{opportunities}件 / degraded adaptersは{degraded}件 / failed adaptersは{failed}件。",

@@ -134,12 +134,20 @@ def _data_completeness(
         fred_status = "degraded"
     else:
         fred_status = "OK"
+    missing_context = []
+    if not market_amedas_available:
+        missing_context.append("Market Amedas未入力")
+    if not correlation_available:
+        missing_context.append("相関構造未入力")
     return {
         "price_data_status": "OK",
         "fred_data_status": fred_status,
         "fred_provider": runtime.get("fred_provider"),
         "market_amedas_available": market_amedas_available,
         "correlation_available": correlation_available,
+        "audit_integrity": "暫定監査" if missing_context else "統合監査",
+        "audit_context_status": "文脈未接続監査" if missing_context else "文脈接続済み",
+        "audit_integrity_reasons": missing_context,
         "degraded_adapters": degraded,
         "failed_adapters": failed,
     }
