@@ -90,6 +90,23 @@ def test_oracle_assets_are_displayed_as_opportunity_judgments_not_role_injuries(
     assert "| VT | O.R.A.C.L.E." in result["report_text"] and "| 追加買い候補 |" in result["report_text"]
 
 
+def test_next_checkpoints_keep_oracle_opportunities_separate_from_real_wounds():
+    inputs = [
+        AssetAuditInput("BTC", "O.R.A.C.L.E.", 50, wound_level=1),
+        AssetAuditInput("VT", "O.R.A.C.L.E.", 50, wound_level=1),
+        AssetAuditInput("TLT", "L.O.D.E.", 50, wound_level=1),
+    ]
+    result = run_integrated_audit(inputs, PortfolioInput({"BTC": 1 / 3, "VT": 1 / 3, "TLT": 1 / 3}))
+
+    assert "BTCの追加買い候補判定が継続するか確認する。" in result["next_checkpoints"]
+    assert "VTの追加買い候補判定が継続するか確認する。" in result["next_checkpoints"]
+    assert "・BTCの追加買い候補判定が継続するか確認する。" in result["report_text"]
+    assert "・VTの追加買い候補判定が継続するか確認する。" in result["report_text"]
+    assert "BTCの1. 価格負傷が継続するか確認する。" not in result["report_text"]
+    assert "VTの1. 価格負傷が継続するか確認する。" not in result["report_text"]
+    assert "TLTの1. 価格負傷が継続するか確認する。" in result["next_checkpoints"]
+
+
 def test_report_labels_independent_market_amedas_values_as_strength_not_ratio():
     names = (("VT", "O.R.A.C.L.E."), ("BTC", "O.R.A.C.L.E."), ("TLT", "L.O.D.E."), ("TIP", "I.N.F.E.R.N.O."), ("GLDM", "A.U.R.A."), ("XLRE", "A.R.C.A.D.I.A."), ("BNDX", "A.T.L.A.S."), ("DBC", "G.A.I.A."))
     market = MarketAmedasInput(

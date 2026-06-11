@@ -93,6 +93,13 @@ def _recommended_action(injury_type: str) -> str:
     return "固定比率と既存ルールを維持"
 
 
+def _next_checkpoint(row: dict[str, Any]) -> str:
+    """機会判定と本物の負傷判定を混同せず、次回監査項目を作る。"""
+    if row["injury_type"] == "追加買い判定":
+        return f"{row['asset']}の追加買い候補判定が継続するか確認する。"
+    return f"{row['asset']}の{row['wound_label']}が継続するか確認する。"
+
+
 def _correlation_integrity(audits: list[AssetAuditInput]) -> tuple[float, bool]:
     values = [float(a.supporting_metrics["correlation_integrity_score"]) for a in audits if "correlation_integrity_score" in a.supporting_metrics]
     return (clamp(mean(values)), True) if values else (100.0, False)
@@ -203,7 +210,7 @@ def run_integrated_audit(asset_audits: Iterable[AssetAuditInput], portfolio: Por
     if action >= 2: recommended.append("継続警戒を確認したうえで、既存ルール内の補正を人間が検討する。")
     elif action == 1: recommended.append("配分変更を急がず、監視頻度を上げる。")
     not_recommended = ["Market Amedasの市場気象のみを理由に売却しない。", "低スコア資産を機械的に売却しない。", "監査結果から自動売買を実行しない。"]
-    checkpoints = [f"{row['asset']}の{row['wound_label']}が継続するか確認する。" for row in wounded[:4]]
+    checkpoints = [_next_checkpoint(row) for row in wounded[:4]]
     if context.btc_divergence_note: checkpoints.append("BTCが成長気団に再連動するか確認する。")
     if "defense_air_mass_absent" in context.market_context_flags: checkpoints.append("TLTとBNDXが景気後退防衛として機能しているか確認する。")
     if "gold_commodity_weakness" in context.market_context_flags: checkpoints.append("GLDM・DBCの弱さが局面不適合か、役割劣化かを確認する。")
