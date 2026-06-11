@@ -97,6 +97,8 @@ def _next_checkpoint(row: dict[str, Any]) -> str:
     """機会判定と本物の負傷判定を混同せず、次回監査項目を作る。"""
     if row["injury_type"] == "追加買い判定":
         return f"{row['asset']}の追加買い候補判定が継続するか確認する。"
+    if row["injury_type"] == "機会判定":
+        return f"{row['asset']}の機会判定が継続するか確認する。"
     return f"{row['asset']}の{row['wound_label']}が継続するか確認する。"
 
 
@@ -171,7 +173,8 @@ def run_integrated_audit(
             "risk_flags": list(audit.risk_flags), "multipliers": {"regime_relevance": regime, "confidence": confidence_multiplier(audit.confidence_level), "penalty": penalty},
         })
     rows.sort(key=lambda row: row["asset_health_score"], reverse=True)
-    wounded = [row for row in rows if row["wound_level"] > 0]
+    opportunity_judgments = [row for row in rows if row["audit_engine"] == "O.R.A.C.L.E."]
+    wounded = [row for row in rows if row["wound_level"] > 0 and row["audit_engine"] != "O.R.A.C.L.E."]
 
     weights = {asset: max(0.0, float(weight)) for asset, weight in portfolio.target_weights.items()}
     total_weight = sum(weights.get(row["asset"], 0) for row in rows)
@@ -240,7 +243,7 @@ def run_integrated_audit(
     if action >= 2: recommended.append("継続警戒を確認したうえで、既存ルール内の補正を人間が検討する。")
     elif action == 1: recommended.append("配分変更を急がず、監視頻度を上げる。")
     not_recommended = ["Market Amedasの市場気象のみを理由に売却しない。", "低スコア資産を機械的に売却しない。", "監査結果から自動売買を実行しない。"]
-    checkpoints = [_next_checkpoint(row) for row in wounded[:4]]
+    checkpoints = [_next_checkpoint(row) for row in [*opportunity_judgments, *wounded[:4]]]
     if context.btc_divergence_note: checkpoints.append("BTCが成長気団に再連動するか確認する。")
     if "defense_air_mass_absent" in context.market_context_flags: checkpoints.append("TLTとBNDXが景気後退防衛として機能しているか確認する。")
     if "gold_commodity_weakness" in context.market_context_flags: checkpoints.append("GLDM・DBCの弱さが局面不適合か、役割劣化かを確認する。")
@@ -261,7 +264,7 @@ def run_integrated_audit(
         "contextual_action_candidate_level": contextual_action_candidate, "internal_action_level": internal_action,
         "raw_action_level": raw_action, "action_level": action, "action_label": ACTION_LABELS_JA[action],
         "portfolio_adjustment_recommendation": {"level": action, "label": ACTION_LABELS_JA[action], "advisory_only": True},
-        "hysteresis_note": hysteresis_note, "market_context_safety_note": market_context_safety_note, "asset_health_rank": rows, "wounded_assets": wounded, "injury_breakdown": injury_breakdown, "opening_caveats": opening_caveats, "role_group_diagnosis": role_group_diagnosis,
+        "hysteresis_note": hysteresis_note, "market_context_safety_note": market_context_safety_note, "asset_health_rank": rows, "wounded_assets": wounded, "opportunity_judgments": opportunity_judgments, "injury_breakdown": injury_breakdown, "opening_caveats": opening_caveats, "role_group_diagnosis": role_group_diagnosis,
         "market_context": asdict(context), "market_context_summary": context.market_context_summary,
         "recommended_actions": recommended, "not_recommended_actions": not_recommended, "next_checkpoints": checkpoints,
         "data_completeness": _data_completeness(market_amedas_available=market_amedas is not None, correlation_available=correlation_available, runtime=data_runtime),
