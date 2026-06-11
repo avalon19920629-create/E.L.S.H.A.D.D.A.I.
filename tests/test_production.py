@@ -54,6 +54,10 @@ def test_run_production_writes_drive_ready_artifacts_without_demo(tmp_path, monk
     manifest = json.loads(paths["manifest_json"].read_text(encoding="utf-8"))
     assert manifest["run_type"] == "production_single_audit"
     assert manifest["safety"] == {"advisory_only": True, "automatic_trading": False, "continuous_monitoring": False}
+    report = paths["lumus8_report_markdown"].read_text(encoding="utf-8")
+    assert "・FREDデータ：OK（provider: pandas_datareader）" in report
+    assert "・Market Amedas：未入力" in report
+    assert "・相関構造：未入力" in report
     assert "demo" not in paths["lumus8_report_markdown"].name
 
 

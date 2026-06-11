@@ -8,7 +8,7 @@ from .market_context_adapter import MARKET_CONTEXT_FLAG_LABELS_JA
 from .text_sanitizer import sanitize_output_text
 
 REQUIRED_SECTIONS = (
-    "結論サマリー", "注意点", "総合診断", "要約", "今回推奨する行動", "今回推奨しない行動", "八騎士 健全度順位", "負傷アセット",
+    "結論サマリー", "データ完全性", "注意点", "総合診断", "要約", "今回推奨する行動", "今回推奨しない行動", "八騎士 健全度順位", "負傷アセット",
     "役割グループ診断", "市場文脈", "相関構造診断", "次回監査で確認すること", "最終メッセージ",
 )
 
@@ -23,6 +23,25 @@ def _injury_breakdown_text(result: Mapping[str, Any]) -> str:
 
 def _table_cell(value: Any) -> str:
     return str(value).replace("|", "／").replace("\n", " ")
+
+
+def _asset_list(items: list[str]) -> str:
+    return "、".join(items) if items else "なし"
+
+
+def _data_completeness_lines(result: Mapping[str, Any]) -> list[str]:
+    completeness = result["data_completeness"]
+    fred_provider = completeness.get("fred_provider")
+    fred_suffix = f"（provider: {fred_provider}）" if fred_provider else ""
+    return [
+        "【データ完全性】",
+        f"・価格データ：{completeness['price_data_status']}",
+        f"・FREDデータ：{completeness['fred_data_status']}{fred_suffix}",
+        f"・Market Amedas：{'入力あり' if completeness['market_amedas_available'] else '未入力'}",
+        f"・相関構造：{'入力あり' if completeness['correlation_available'] else '未入力'}",
+        f"・degraded adapters：{_asset_list(completeness['degraded_adapters'])}",
+        f"・failed adapters：{_asset_list(completeness['failed_adapters'])}",
+    ]
 
 
 def sanitize_report_text(text: str) -> str:
@@ -40,6 +59,7 @@ def render_integrated_report(result: Mapping[str, Any]) -> str:
         f"総合状態：{result['global_judgment_label']} / 推奨運用判断：{result['action_label']}（助言のみ・自動売買なし）",
         f"負傷アセットは{wounded}件（内訳：{breakdown}）。",
         "低スコアは自動売却を意味しない。固定比率と既存の乖離ルールを優先する。",
+        "", *_data_completeness_lines(result),
         "", "【注意点】", *_bullets(result.get("opening_caveats", [])),
         "", "【総合診断】",
         f"聖域健全度スコア：{result['sanctuary_health_score']:.1f} / 100",

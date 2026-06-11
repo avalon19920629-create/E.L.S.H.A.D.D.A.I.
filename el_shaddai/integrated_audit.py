@@ -6,7 +6,7 @@ import argparse
 from dataclasses import asdict
 from pathlib import Path
 from statistics import mean
-from typing import Any, Iterable
+from typing import Any, Iterable, Mapping
 
 from .labels import ACTION_LABELS_JA, CONFIDENCE_LABELS_JA, GLOBAL_JUDGMENT_LABELS_JA, HEALTH_LABELS_JA, WOUND_TYPE_LABELS_JA
 from .market_context_adapter import adapt_market_context
@@ -116,7 +116,37 @@ def _role_diagnosis(rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
     return result
 
 
-def run_integrated_audit(asset_audits: Iterable[AssetAuditInput], portfolio: PortfolioInput, market_amedas: MarketAmedasInput | None = None) -> dict[str, Any]:
+FRED_ASSETS = {"TLT", "TIP"}
+
+
+def _data_completeness(
+    *, market_amedas_available: bool, correlation_available: bool, runtime: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    """Normalize non-secret runtime status for the human-readable audit report."""
+    runtime = runtime or {}
+    degraded = sorted({str(asset) for asset in runtime.get("degraded_assets", [])})
+    failed = sorted({str(asset) for asset in runtime.get("failed_adapters", [])})
+    if FRED_ASSETS.intersection(failed):
+        fred_status = "failed"
+    elif FRED_ASSETS.intersection(degraded):
+        fred_status = "degraded"
+    else:
+        fred_status = "OK"
+    return {
+        "price_data_status": "OK",
+        "fred_data_status": fred_status,
+        "fred_provider": runtime.get("fred_provider"),
+        "market_amedas_available": market_amedas_available,
+        "correlation_available": correlation_available,
+        "degraded_adapters": degraded,
+        "failed_adapters": failed,
+    }
+
+
+def run_integrated_audit(
+    asset_audits: Iterable[AssetAuditInput], portfolio: PortfolioInput, market_amedas: MarketAmedasInput | None = None,
+    *, data_runtime: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
     """8資産の役割監査を集約する。返す運用判断は助言であり、自動執行しない。"""
     audits = list(asset_audits)
     if not audits: raise ValueError("asset_audits は1件以上必要です")
@@ -234,6 +264,7 @@ def run_integrated_audit(asset_audits: Iterable[AssetAuditInput], portfolio: Por
         "hysteresis_note": hysteresis_note, "market_context_safety_note": market_context_safety_note, "asset_health_rank": rows, "wounded_assets": wounded, "injury_breakdown": injury_breakdown, "opening_caveats": opening_caveats, "role_group_diagnosis": role_group_diagnosis,
         "market_context": asdict(context), "market_context_summary": context.market_context_summary,
         "recommended_actions": recommended, "not_recommended_actions": not_recommended, "next_checkpoints": checkpoints,
+        "data_completeness": _data_completeness(market_amedas_available=market_amedas is not None, correlation_available=correlation_available, runtime=data_runtime),
         "correlation_integrity_score": correlation_score if correlation_available else None,
         "correlation_diagnosis": f"相関健全度：{correlation_score:.1f} / 100。" if correlation_available else "相関データ未提供のため、中立値 1.00 を使用した。今回のスコアには、危機時分散の実測評価は含まれていない。",
         "components": {"weighted_asset_health": round(weighted_health, 2), "internal_weighted_asset_health": round(internal_weighted_health, 2), "role_coverage_factor": round(role_coverage_factor, 3), "correlation_integrity_factor": round(correlation_factor, 3), "concentration_penalty": round(concentration_penalty, 3)},
