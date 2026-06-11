@@ -1,3 +1,4 @@
+from dataclasses import replace
 from pathlib import Path
 
 from el_shaddai import cli
@@ -148,3 +149,38 @@ def test_latest_xlre_role_inputs_falls_back_on_fetch_failure(monkeypatch):
 
     assert result.used_arcadia is False
     assert all(value == 0.0 for value in result.role_inputs["XLRE"].values())
+
+
+def test_arcadia_raw_metrics_expose_shared_inputs_for_double_counting_review():
+    result = compute_xlre_role_proxies(_base_prices())
+
+    assert "xlre_spy_relative_return" in result.raw_metrics
+    assert "vnq_spy_relative_return" in result.raw_metrics
+    assert "hyg_spy_divergence" in result.raw_metrics
+
+
+def test_arcadia_score_breakdown_identifies_role_driver_and_proxy_contributions(tmp_path: Path):
+    prices = _base_prices()
+    prices["XLRE"] = [40 + ((i % 2) * 0.01) for i in range(90)]
+    prices["SPY"] = [value * 12.5 for value in prices["XLRE"]]
+    prices["HYG"] = [80 - i * 0.20 for i in range(90)]
+    prices["UUP"] = [28 + i * 0.06 for i in range(90)]
+    prices["TLT"] = [100 - i * 0.20 for i in range(90)]
+    prices["^TNX"] = [3.5 + i * 0.02 for i in range(90)]
+    arcadia = compute_xlre_role_proxies(prices)
+    diagnostic_proxies = {name: -2.0 for name in ROLE_COMPONENT_WEIGHTS["XLRE"]}
+    arcadia = replace(arcadia, role_inputs={"XLRE": diagnostic_proxies}, proxies=diagnostic_proxies)
+    scores = score_all({"XLRE": prices["XLRE"]}, arcadia.role_inputs, "2026-06-11")
+
+    report = write_markdown(scores, tmp_path, "test", arcadia_result=arcadia).read_text(encoding="utf-8")
+
+    assert "### A.R.C.A.D.I.A. score breakdown" in report
+    assert "final_score driver: role_score（役割proxy要因がfinal_scoreを規定）" in report
+    assert "| observed proxy | raw value | normalized score | contribution | direction | reason / interpretation |" in report
+    for proxy in ("REIT Relative Strength proxy", "金利環境 proxy", "HYG proxy", "UUP proxy", "DBC proxy", "XLRE/SPY proxy"):
+        assert proxy in report
+    assert "Role component contribution reconciliation:" in report
+    assert "| rental_cashflow |" in report
+    assert "REIT Relative Strength vs XLRE/SPY: 同一指標そのものではない" in report
+    assert "共通ショック時の重複ペナルティ疑義あり" in report
+    assert "スコア計算ロジック自体は変更していない" in report

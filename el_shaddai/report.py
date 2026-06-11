@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import csv
 from pathlib import Path
-from typing import Iterable, List, Optional
+from typing import Iterable, List, Mapping, Optional, Sequence
 
 from .arcadia_adapter import ArcadiaResult
 from .atlas_adapter import AtlasResult
@@ -13,7 +13,7 @@ from .gaia_adapter import GaiaResult
 from .inferno_adapter import InfernoResult
 from .lode_adapter import LodeResult
 from .oracle_adapter import OracleResult
-from .config import ROLE_COMPONENT_GROUPS, ROLE_COMPONENT_WEIGHTS
+from .config import ROLE_COMPONENT_GROUPS, ROLE_COMPONENT_WEIGHTS, ROLE_GROUP_WEIGHTS
 from .scoring import AssetScore, ranking
 from .text_sanitizer import sanitize_output_text
 
@@ -22,6 +22,107 @@ OUTPUT_FIELDS = ["asset", "price_score", "role_score", "el_shaddai_score", "labe
 
 def role_display(score: float | None) -> str:
     return "N/A" if score is None else f"{score:.2f}"
+
+
+ARCADIA_DIAGNOSTIC_PROXIES: Sequence[tuple[str, Sequence[str], Sequence[str], str]] = (
+    ("REIT Relative Strength proxy", ("reit_relative_strength",), ("xlre_spy_relative_return", "vnq_spy_relative_return"), "REIT固有の相対強度。XLRE/SPY相対リターンを共有するため、完全独立ではない。"),
+    ("金利環境 proxy", ("yield_spread_advantage", "real_rate_shock"), ("tnx_change", "tnx_level", "tlt_trend"), "金利水準・変化とTLTトレンドによる、利回り優位性および不動産キャッシュフロー割引率への影響。"),
+    ("HYG proxy", ("credit_stress",), ("hyg_trend", "hyg_spy_divergence"), "ハイイールド信用環境による借換えストレス。"),
+    ("UUP proxy", ("dollar_headwind",), ("uup_trend",), "ドル高を広範なリスク資産への逆風として扱う。"),
+    ("DBC proxy", ("inflation_pass_through",), ("dbc_trend", "xlre_spy_relative_return"), "商品インフレとXLREの相対収益による、インフレ転嫁力のproxy。"),
+    ("XLRE/SPY proxy", ("equity_submission",), ("xlre_spy_corr",), "XLREが独立した地主役割ではなく、株式市場へ従属していないかを相関で確認する。"),
+)
+
+
+def _arcadia_component_contributions(score: AssetScore) -> Mapping[str, float]:
+    """Return diagnostic pre-cap Role Score deltas without changing scoring."""
+    weights = ROLE_COMPONENT_WEIGHTS["XLRE"]
+    groups = ROLE_COMPONENT_GROUPS["XLRE"]
+    group_weights = ROLE_GROUP_WEIGHTS["XLRE"]
+    contributions: dict[str, float] = {}
+    for name, normalized_score in score.role_details.components.items():
+        group = groups[name]
+        group_total = sum(weight for component, weight in weights.items() if groups[component] == group)
+        contributions[name] = (float(normalized_score) - 50.0) * group_weights[group] * weights[name] / group_total
+    return contributions
+
+
+def _arcadia_raw_values(raw_metrics: Mapping[str, float], names: Sequence[str]) -> str:
+    values = [f"{name}={raw_metrics[name]:+.6f}" for name in names if name in raw_metrics]
+    return " / ".join(values) if values else "N/A"
+
+
+def _arcadia_direction(normalized_score: float) -> str:
+    if normalized_score > 50.000001:
+        return "favorable（役割スコアを押し上げ）"
+    if normalized_score < 49.999999:
+        return "adverse（役割スコアを押し下げ）"
+    return "neutral（中立）"
+
+
+def _arcadia_breakdown_lines(score: AssetScore, result: ArcadiaResult) -> List[str]:
+    contributions = _arcadia_component_contributions(score)
+    if score.role_score is None:
+        driver = "N/A"
+    elif score.price_score < score.role_score:
+        driver = "price_score（価格要因がfinal_scoreを規定）"
+    elif score.role_score < score.price_score:
+        driver = "role_score（役割proxy要因がfinal_scoreを規定）"
+    else:
+        driver = "price_score と role_score が同点"
+
+    lines = [
+        "",
+        "### A.R.C.A.D.I.A. score breakdown",
+        "",
+        f"- price_score: {score.price_score:.2f}",
+        f"- role_score: {score.role_score:.2f}" if score.role_score is not None else "- role_score: N/A",
+        f"- final_score: {score.el_shaddai_score:.2f}",
+        f"- final_score driver: {driver}",
+        f"- pre-cap contribution total vs neutral Role Score 50: {sum(contributions.values()):+.2f} points",
+        "- contribution definition: 構造化グループ集約後・cap適用前のRole Scoreについて、中立50点から各componentが動かした点数。スコア計算ロジック自体は変更していない。",
+        "",
+        "| observed proxy | raw value | normalized score | contribution | direction | reason / interpretation |",
+        "| --- | --- | ---: | ---: | --- | --- |",
+    ]
+    for label, components, raw_names, interpretation in ARCADIA_DIAGNOSTIC_PROXIES:
+        available = [name for name in components if name in score.role_details.components]
+        effective_weights = {
+            name: ROLE_GROUP_WEIGHTS["XLRE"][ROLE_COMPONENT_GROUPS["XLRE"][name]] * ROLE_COMPONENT_WEIGHTS["XLRE"][name]
+            / sum(weight for component, weight in ROLE_COMPONENT_WEIGHTS["XLRE"].items() if ROLE_COMPONENT_GROUPS["XLRE"][component] == ROLE_COMPONENT_GROUPS["XLRE"][name])
+            for name in available
+        }
+        effective_total = sum(effective_weights.values())
+        normalized = sum(float(score.role_details.components[name]) * effective_weights[name] for name in available) / effective_total if effective_total else 50.0
+        contribution = sum(contributions.get(name, 0.0) for name in components)
+        component_reason = " / ".join(result.reasons.get(name, "neutral fallback") for name in components)
+        lines.append(
+            f"| {label} ({', '.join(components)}) | {_arcadia_raw_values(result.raw_metrics, raw_names)} | "
+            f"{normalized:.2f} | {contribution:+.2f} | {_arcadia_direction(normalized)} | {interpretation} {component_reason} |"
+        )
+
+    lines.extend([
+        "",
+        "Role component contribution reconciliation:",
+        "",
+        "| role component | normalized score | contribution vs neutral 50 |",
+        "| --- | ---: | ---: |",
+    ])
+    for name, normalized_score in score.role_details.components.items():
+        lines.append(f"| {name} | {float(normalized_score):.2f} | {contributions.get(name, 0.0):+.2f} |")
+
+    lines.extend([
+        "",
+        "Double-counting review:",
+        "- REIT Relative Strength vs XLRE/SPY: 同一指標そのものではない。reit_relative_strength はXLRE/SPYおよびVNQ/SPYの相対リターン、equity_submission はXLRE/SPYリターン相関を使用する。ただしXLRE/SPY相対リターンはreit_relative_strengthとDBC/inflation_pass_throughで共有されるため、入力重複の疑義あり。",
+        "- 流動性引き締め要因: 金利環境・HYG・UUPは異なる市場系列だが、real_rate_shock・credit_stress・dollar_headwindは同じrisk_penaltyグループで加算される。さらに複数のsevere条件によるRole Score capがあるため、共通ショック時の重複ペナルティ疑義あり。",
+        "- DBC: inflation_pass_throughはDBC trendだけでなくXLRE/SPY相対リターンも含むため、純粋なDBC単独proxyではない。",
+    ])
+    if score.role_details.applied_caps:
+        lines.append(f"- Applied Role caps affecting role_score: {' | '.join(score.role_details.applied_caps)}")
+    else:
+        lines.append("- Applied Role caps affecting role_score: none")
+    return lines
 
 
 def write_csv(scores: Iterable[AssetScore], output_dir: Path) -> Path:
@@ -275,6 +376,8 @@ def write_markdown(
             lines.append(f"| {name} | {value:+.3f} | {arcadia_result.reasons.get(name, 'neutral fallback')} |")
         lines.extend(["", "Reasons:"])
         lines.extend(f"- {name}: {reason}" for name, reason in arcadia_result.reasons.items())
+        if xlre_score is not None:
+            lines.extend(_arcadia_breakdown_lines(xlre_score, arcadia_result))
 
     lines.extend(["", "## Score Details", ""])
     for score in scores:
