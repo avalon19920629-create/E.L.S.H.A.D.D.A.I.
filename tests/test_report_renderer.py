@@ -261,3 +261,66 @@ def test_available_market_amedas_and_correlation_render_normal_integrated_audit(
     assert "Market Amedasおよび相関構造を接続した通常の統合監査です。" in report
     assert "暫定監査" not in report
     assert "文脈未接続の暫定判定" not in report
+
+
+def test_xlre_high_price_warning_with_preserved_rental_function_is_not_rendered_as_collapse():
+    inputs = [
+        AssetAuditInput(
+            "XLRE", "A.R.C.A.D.I.A.", 22.88,
+            diagnosis_summary="52w range position=98.0; z-score=1.80; weekly return=3.0%; role headwinds",
+            supporting_metrics={
+                "price_score": 22.88,
+                "role_score": 43.74,
+                "final_score": 22.88,
+                "core_score": 58.46,
+                "rental_cashflow": 85.72,
+                "price_components": {
+                    "range_52w_position": 2.0,
+                    "z_score": 5.0,
+                    "weekly_drawdown": 20.0,
+                    "range_5y_position": 35.0,
+                },
+                "role_components": {
+                    "rental_cashflow": 85.72,
+                    "reit_relative_strength": 7.30,
+                    "credit_stress": 0.00,
+                    "real_rate_shock": 25.88,
+                },
+            },
+        ),
+        AssetAuditInput("TLT", "L.O.D.E.", 20, diagnosis_summary="通常の役割負傷"),
+    ]
+    result = run_integrated_audit(inputs, PortfolioInput({"XLRE": 0.5, "TLT": 0.5}))
+    by_asset = {row["asset"]: row for row in result["asset_health_rank"]}
+    xlre = by_asset["XLRE"]
+    report = result["report_text"]
+
+    assert xlre["display_status"] == "構造逆風"
+    assert xlre["injury_type"] == "価格警戒＋役割逆風"
+    assert xlre["display_status"] != "0. 戦闘不能"
+    assert "価格崩壊" not in report
+    assert "価格警戒：高値圏 / 追加買い非推奨" in report
+    assert "役割逆風：金利・信用・相対劣後" in report
+    assert "中核機能：地代キャッシュフロー機能は残存" in report
+    assert "構造崩壊ではなく、価格警戒と外部環境逆風の複合判定" in report
+    assert "XLREは売却ではなく、次回監査で金利・信用・REIT相対強度を重点確認する。" in result["next_checkpoints"]
+    assert "低スコアは自動売却を意味しない。固定比率と既存の乖離ルールを優先する。" in report
+    assert "監査結果から自動売買を実行しない。" in report
+    assert by_asset["TLT"]["display_status"] == "0. 戦闘不能"
+    assert by_asset["TLT"]["injury_type"] == "構造負傷"
+
+
+def test_xlre_low_price_score_without_preserved_core_uses_normal_injury_labels():
+    audit = AssetAuditInput(
+        "XLRE", "A.R.C.A.D.I.A.", 20,
+        supporting_metrics={
+            "price_score": 20, "role_score": 40, "core_score": 45, "rental_cashflow": 40,
+            "price_components": {"range_52w_position": 0, "z_score": 0},
+        },
+    )
+    result = run_integrated_audit([audit], PortfolioInput({"XLRE": 1.0}))
+    xlre = result["asset_health_rank"][0]
+
+    assert xlre["display_status"] == "0. 戦闘不能"
+    assert xlre["injury_type"] == "構造負傷"
+    assert xlre["interpretation_notes"] == []

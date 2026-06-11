@@ -119,7 +119,11 @@ def _asset_audits(scores: list[AssetScore]) -> list[AssetAuditInput]:
             raw_score=score.el_shaddai_score,
             confidence_level=3,
             diagnosis_summary=score.main_reason,
-            supporting_metrics={"price_score": score.price_score, "role_score": score.role_score, "data_date": score.data_date},
+            supporting_metrics={
+                "price_score": score.price_score, "role_score": score.role_score, "final_score": score.el_shaddai_score, "data_date": score.data_date,
+                "price_components": dict(score.price_details.components), "role_components": dict(score.role_details.components),
+                "core_score": score.role_details.core_score, "rental_cashflow": score.role_details.components.get("rental_cashflow"),
+            },
         )
         for score in scores
     ]

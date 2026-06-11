@@ -93,8 +93,56 @@ def _recommended_action(injury_type: str) -> str:
     return "固定比率と既存ルールを維持"
 
 
+def _xlre_price_warning_interpretation(audit: AssetAuditInput) -> dict[str, Any] | None:
+    """高値圏によるXLREの低スコアを、構造崩壊とは分けて表示する。"""
+    if audit.asset != "XLRE" or audit.audit_engine != "A.R.C.A.D.I.A.":
+        return None
+    metrics = audit.supporting_metrics
+    price_score = metrics.get("price_score")
+    role_score = metrics.get("role_score")
+    final_score = metrics.get("final_score", audit.role_health_score)
+    core_score = metrics.get("core_score")
+    role_components = metrics.get("role_components", {})
+    price_components = metrics.get("price_components", {})
+    role_components = role_components if isinstance(role_components, Mapping) else {}
+    price_components = price_components if isinstance(price_components, Mapping) else {}
+    rental_cashflow = metrics.get("rental_cashflow", role_components.get("rental_cashflow"))
+    numeric = (price_score, role_score, final_score, core_score, rental_cashflow)
+    if not all(isinstance(value, (int, float)) for value in numeric):
+        return None
+
+    # Price component scores are opportunity scores: low values mean high/overheated prices.
+    elevated_price_signals = [
+        name for name, threshold in {
+            "range_52w_position": 25.0, "z_score": 25.0, "weekly_drawdown": 25.0, "range_5y_position": 40.0,
+        }.items()
+        if isinstance(price_components.get(name), (int, float)) and float(price_components[name]) <= threshold
+    ]
+    price_is_driver = float(price_score) <= float(role_score) and abs(float(price_score) - float(final_score)) <= 0.01
+    core_function_remains = float(rental_cashflow) >= 60.0 and float(core_score) >= 50.0
+    if not (price_is_driver and core_function_remains and len(elevated_price_signals) >= 2):
+        return None
+
+    return {
+        "display_status": "構造逆風",
+        "injury_type": "価格警戒＋役割逆風",
+        "one_line_summary": "高値圏で追加買い妙味は低いが、地代機能は残存。金利・信用・REIT相対強度を重点確認。",
+        "recommended_action": "売却ではなく、次回監査で金利・信用・REIT相対強度を重点確認",
+        "interpretation_notes": [
+            "価格警戒：高値圏 / 追加買い非推奨",
+            "役割逆風：金利・信用・相対劣後",
+            "中核機能：地代キャッシュフロー機能は残存",
+            "構造崩壊ではなく、価格警戒と外部環境逆風の複合判定",
+            "低スコアは自動売却を意味しない",
+        ],
+        "next_checkpoint": "XLREは売却ではなく、次回監査で金利・信用・REIT相対強度を重点確認する。",
+    }
+
+
 def _next_checkpoint(row: dict[str, Any]) -> str:
     """機会判定と本物の負傷判定を混同せず、次回監査項目を作る。"""
+    if row.get("next_checkpoint"):
+        return row["next_checkpoint"]
     if row["injury_type"] == "追加買い判定":
         return f"{row['asset']}の追加買い候補判定が継続するか確認する。"
     if row["injury_type"] == "機会判定":
@@ -173,13 +221,17 @@ def run_integrated_audit(
         # 市場気象や低信頼だけでは負傷としない。負傷は役割証拠と構造フラグで判定する。
         wound = classify_wound(role_evidence_score, audit.risk_flags, audit.wound_level)
         injury_type = _injury_type(audit.audit_engine, wound)
-        rows.append({
+        row = {
             "asset": audit.asset, "audit_engine": audit.audit_engine, "asset_health_score": score, "internal_health_score": internal_score, "role_evidence_score": role_evidence_score, "health_level": level,
             "health_label": HEALTH_LABELS_JA[level], "display_status": _display_status(audit.audit_engine, wound, HEALTH_LABELS_JA[level]), "wound_level": wound, "wound_label": WOUND_TYPE_LABELS_JA[wound], "injury_type": injury_type,
             "confidence_level": confidence_level, "confidence_label": CONFIDENCE_LABELS_JA[confidence_level],
             "diagnosis_summary": audit.diagnosis_summary, "one_line_summary": _one_line_summary(audit.diagnosis_summary, injury_type), "recommended_action": _recommended_action(injury_type),
-            "risk_flags": list(audit.risk_flags), "multipliers": {"regime_relevance": regime, "confidence": confidence_multiplier(audit.confidence_level), "penalty": penalty},
-        })
+            "interpretation_notes": [], "risk_flags": list(audit.risk_flags), "multipliers": {"regime_relevance": regime, "confidence": confidence_multiplier(audit.confidence_level), "penalty": penalty},
+        }
+        xlre_interpretation = _xlre_price_warning_interpretation(audit)
+        if xlre_interpretation:
+            row.update(xlre_interpretation)
+        rows.append(row)
     rows.sort(key=lambda row: row["asset_health_score"], reverse=True)
     opportunity_judgments = [row for row in rows if row["audit_engine"] == "O.R.A.C.L.E."]
     wounded = [row for row in rows if row["wound_level"] > 0 and row["audit_engine"] != "O.R.A.C.L.E."]
