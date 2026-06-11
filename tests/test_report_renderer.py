@@ -120,3 +120,56 @@ def test_report_labels_independent_market_amedas_values_as_strength_not_ratio():
 
     assert "主要気団の強度（各気団の独立スコア）：利回り気団 60.0 / 100" in report
     assert "主要気団の比率" not in report
+
+
+def test_data_completeness_reports_missing_optional_inputs_without_asset_injury_or_secrets():
+    names = (("VT", "O.R.A.C.L.E."), ("BTC", "O.R.A.C.L.E."), ("TLT", "L.O.D.E."), ("TIP", "I.N.F.E.R.N.O."))
+    result = run_integrated_audit(
+        [AssetAuditInput(asset, engine, 80) for asset, engine in names],
+        PortfolioInput({asset: 0.25 for asset, _ in names}),
+        data_runtime={"fred_provider": "fredapi", "degraded_assets": [], "failed_adapters": [], "FRED_API_KEY": "never-render-this"},
+    )
+    report = result["report_text"]
+
+    assert "【データ完全性】" in report
+    assert "・価格データ：OK" in report
+    assert "・FREDデータ：OK（provider: fredapi）" in report
+    assert "・Market Amedas：未入力" in report
+    assert "・相関構造：未入力" in report
+    assert "・degraded adapters：なし" in report
+    assert "・failed adapters：なし" in report
+    assert "never-render-this" not in report
+    assert result["wounded_assets"] == []
+
+
+def test_data_completeness_reports_degraded_and_failed_adapters_and_available_optional_inputs():
+    market = MarketAmedasInput({}, {}, {}, {})
+    audits = [
+        AssetAuditInput("TLT", "L.O.D.E.", 80, supporting_metrics={"correlation_integrity_score": 90}),
+        AssetAuditInput("TIP", "I.N.F.E.R.N.O.", 80),
+        AssetAuditInput("GLDM", "A.U.R.A.", 80),
+    ]
+    report = run_integrated_audit(
+        audits,
+        PortfolioInput({"TLT": 1 / 3, "TIP": 1 / 3, "GLDM": 1 / 3}),
+        market,
+        data_runtime={"fred_provider": "pandas_datareader", "degraded_assets": ["GLDM", "TLT"], "failed_adapters": ["TIP"]},
+    )["report_text"]
+
+    assert "・FREDデータ：failed（provider: pandas_datareader）" in report
+    assert "・Market Amedas：入力あり" in report
+    assert "・相関構造：入力あり" in report
+    assert "・degraded adapters：GLDM、TLT" in report
+    assert "・failed adapters：TIP" in report
+
+
+def test_data_completeness_reports_fred_degraded_when_fred_adapter_is_degraded_but_not_failed():
+    report = run_integrated_audit(
+        [AssetAuditInput("TLT", "L.O.D.E.", 80)],
+        PortfolioInput({"TLT": 1.0}),
+        data_runtime={"fred_provider": "fredapi", "degraded_assets": ["TLT"], "failed_adapters": []},
+    )["report_text"]
+
+    assert "・FREDデータ：degraded（provider: fredapi）" in report
+    assert "・degraded adapters：TLT" in report
+    assert "・failed adapters：なし" in report

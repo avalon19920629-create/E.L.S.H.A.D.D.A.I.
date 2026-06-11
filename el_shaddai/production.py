@@ -178,7 +178,19 @@ def run_production(config_path: str | Path, output_dir: str | Path) -> dict[str,
             oracle_result=oracle_result,
         ),
     }
-    integrated = run_integrated_audit(_asset_audits(scores), PortfolioInput(dict(config.target_weights)))
+    degraded_assets = [asset for asset, result in adapter_results.items() if getattr(result, "degraded", False)]
+    failed_adapters = [
+        asset for asset, result in adapter_results.items()
+        if getattr(result, "degraded", False) and not _adapter_succeeded(result)
+    ]
+    integrated = run_integrated_audit(
+        _asset_audits(scores), PortfolioInput(dict(config.target_weights)),
+        data_runtime={
+            "fred_provider": config.fred_provider,
+            "degraded_assets": degraded_assets,
+            "failed_adapters": failed_adapters,
+        },
+    )
     integrated_path = destination / "el_shaddai_lumus8_audit.md"
     integrated_path.write_text(integrated["report_text"], encoding="utf-8")
     paths["lumus8_report_markdown"] = integrated_path
@@ -191,11 +203,8 @@ def run_production(config_path: str | Path, output_dir: str | Path) -> dict[str,
         "config": asdict(config),
         "output_dir": str(destination),
         "warnings": warnings,
-        "degraded_assets": [asset for asset, result in adapter_results.items() if getattr(result, "degraded", False)],
-        "failed_adapters": [
-            asset for asset, result in adapter_results.items()
-            if getattr(result, "degraded", False) and not _adapter_succeeded(result)
-        ],
+        "degraded_assets": degraded_assets,
+        "failed_adapters": failed_adapters,
         "adapter_status": {asset: {
             "source": result.source, "degraded": getattr(result, "degraded", False),
             "stale_days": getattr(result, "stale_days", None),
