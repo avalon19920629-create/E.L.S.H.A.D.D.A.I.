@@ -165,6 +165,12 @@ def test_data_completeness_reports_missing_optional_inputs_without_asset_injury_
     assert "・相関構造：未入力" in report
     assert "・degraded adapters：なし" in report
     assert "・failed adapters：なし" in report
+    assert "監査完全性：暫定監査（文脈未接続監査）" in report
+    assert "理由：Market Amedas未入力 / 相関構造未入力" in report
+    assert "今回の総合状態は、Market Amedasおよび相関構造が未入力のため、文脈未接続の暫定判定です。" in report
+    assert "総合状態と推奨運用判断は、文脈未接続の参考判定として確認してください。" in report
+    assert "暫定判定は自動売買・自動売却を意味しません。" in report
+    assert "低スコアは自動売却を意味しない。固定比率と既存の乖離ルールを優先する。" in report
     assert "never-render-this" not in report
     assert result["wounded_assets"] == []
 
@@ -200,3 +206,58 @@ def test_data_completeness_reports_fred_degraded_when_fred_adapter_is_degraded_b
     assert "・FREDデータ：degraded（provider: fredapi）" in report
     assert "・degraded adapters：TLT" in report
     assert "・failed adapters：なし" in report
+
+
+def test_market_amedas_missing_marks_audit_as_provisional_without_adding_asset_injury():
+    audits = [
+        AssetAuditInput("TLT", "L.O.D.E.", 80, supporting_metrics={"correlation_integrity_score": 90}),
+        AssetAuditInput("TIP", "I.N.F.E.R.N.O.", 80),
+    ]
+    result = run_integrated_audit(
+        audits,
+        PortfolioInput({"TLT": 0.5, "TIP": 0.5}),
+        data_runtime={"fred_provider": "fredapi", "degraded_assets": [], "failed_adapters": []},
+    )
+    report = result["report_text"]
+
+    assert result["data_completeness"]["audit_integrity"] == "暫定監査"
+    assert result["data_completeness"]["audit_integrity_reasons"] == ["Market Amedas未入力"]
+    assert "監査完全性：暫定監査（文脈未接続監査）" in report
+    assert "理由：Market Amedas未入力" in report
+    assert "今回の総合状態は、Market Amedasが未入力のため、文脈未接続の暫定判定です。" in report
+    assert "データ接続：FRED OK / degraded adapters なし / failed adapters なし" in report
+    assert result["wounded_assets"] == []
+
+
+def test_correlation_missing_marks_audit_as_provisional_without_adding_asset_injury():
+    market = MarketAmedasInput({}, {}, {}, {})
+    result = run_integrated_audit(
+        [AssetAuditInput("TLT", "L.O.D.E.", 80), AssetAuditInput("TIP", "I.N.F.E.R.N.O.", 80)],
+        PortfolioInput({"TLT": 0.5, "TIP": 0.5}),
+        market,
+    )
+    report = result["report_text"]
+
+    assert result["data_completeness"]["audit_integrity"] == "暫定監査"
+    assert result["data_completeness"]["audit_integrity_reasons"] == ["相関構造未入力"]
+    assert "監査完全性：暫定監査（文脈未接続監査）" in report
+    assert "理由：相関構造未入力" in report
+    assert "今回の総合状態は、相関構造が未入力のため、文脈未接続の暫定判定です。" in report
+    assert result["wounded_assets"] == []
+
+
+def test_available_market_amedas_and_correlation_render_normal_integrated_audit():
+    market = MarketAmedasInput({}, {}, {}, {})
+    result = run_integrated_audit(
+        [AssetAuditInput("TLT", "L.O.D.E.", 80, supporting_metrics={"correlation_integrity_score": 90})],
+        PortfolioInput({"TLT": 1.0}),
+        market,
+    )
+    report = result["report_text"]
+
+    assert result["data_completeness"]["audit_integrity"] == "統合監査"
+    assert result["data_completeness"]["audit_integrity_reasons"] == []
+    assert "監査完全性：統合監査（文脈接続済み）" in report
+    assert "Market Amedasおよび相関構造を接続した通常の統合監査です。" in report
+    assert "暫定監査" not in report
+    assert "文脈未接続の暫定判定" not in report
