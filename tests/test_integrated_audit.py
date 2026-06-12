@@ -171,3 +171,22 @@ def test_oracle_opportunity_labels_are_preserved_with_dimension_metrics():
     assert by_asset["VT"]["injury_type"] == "追加買い判定"
     assert by_asset["BTC"]["injury_type"] == "機会判定"
     assert result["wounded_assets"] == []
+
+
+def test_final_health_and_role_diagnosis_are_separate_for_price_injured_dbc():
+    inputs = audits(80, supporting_metrics={"price_score": 80, "role_score": 80, "final_score": 80})
+    dbc = next(audit for audit in inputs if audit.asset == "DBC")
+    dbc.role_health_score = 91.29
+    dbc.supporting_metrics = {"price_score": 42.32, "role_score": 91.29, "final_score": 42.32}
+
+    result = run_integrated_audit(inputs, portfolio())
+    by_asset = {row["asset"]: row for row in result["asset_health_rank"]}
+
+    assert by_asset["DBC"]["asset_health_score"] == 42.32
+    assert by_asset["DBC"]["role_evidence_score"] == 91.29
+    assert by_asset["DBC"]["injury_type"] == "価格負傷"
+    assert by_asset["DBC"]["display_status"] == "価格負傷"
+    assert by_asset["DBC"]["role_status"] == "5. 輝ける騎士"
+    assert result["role_group_diagnosis"]["インフレ防衛"]["score"] == pytest.approx((80 + 91.29 + 80) / 3, abs=0.1)
+    assert result["sanctuary_health_score"] == pytest.approx((80 * 7 + 42.32) / 8, abs=0.1)
+    assert result["internal_sanctuary_health_score"] == pytest.approx((80 * 7 + 91.29) / 8, abs=0.1)
