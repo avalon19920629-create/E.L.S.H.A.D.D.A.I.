@@ -61,11 +61,39 @@ def classify_wound(score: float, risk_flags: Iterable[str], explicit: int | None
     return 3
 
 
-def _injury_type(audit_engine: str, wound_level: int) -> str:
-    """統合報告書向けに、O.R.A.C.L.E.の機会判定と役割負傷を分離する。"""
-    if audit_engine == "O.R.A.C.L.E.":
+def _numeric_metric(metrics: Mapping[str, Any], name: str) -> float | None:
+    value = metrics.get(name)
+    return float(value) if isinstance(value, (int, float)) else None
+
+
+def _injury_type(audit: AssetAuditInput, wound_level: int) -> str:
+    """価格・役割・構造の証拠から、負傷の原因をwound_levelとは独立に分類する。"""
+    if audit.audit_engine == "O.R.A.C.L.E.":
         return "追加買い判定" if wound_level > 0 else "機会判定"
-    return {0: "負傷なし", 1: "価格負傷", 2: "役割負傷", 3: "構造負傷"}[wound_level]
+    if wound_level == 0:
+        return "負傷なし"
+
+    metrics = audit.supporting_metrics
+    price_score = _numeric_metric(metrics, "price_score")
+    role_score = _numeric_metric(metrics, "role_score")
+    final_score = _numeric_metric(metrics, "final_score")
+    structural = bool(set(audit.risk_flags) & STRUCTURAL_FLAGS)
+    if structural or wound_level == 3 or (final_score is not None and final_score < 30):
+        return "構造負傷"
+
+    # classify_woundと同じ60点を、価格・役割の単独/複合要因を分ける境界に使う。
+    if price_score is not None and role_score is not None:
+        price_low = price_score < 60
+        role_low = role_score < 60
+        if price_low and role_low:
+            return "複合負傷"
+        if price_low:
+            return "価格負傷"
+        if role_low:
+            return "役割負傷"
+
+    # supporting_metricsを持たない既存入力との互換性を維持する。
+    return {1: "価格負傷", 2: "役割負傷", 3: "構造負傷"}[wound_level]
 
 
 def _one_line_summary(text: str, injury_type: str) -> str:
@@ -88,7 +116,7 @@ def _display_status(audit_engine: str, wound_level: int, health_label: str) -> s
 def _recommended_action(injury_type: str) -> str:
     if injury_type == "追加買い判定":
         return "既存ルール内で追加買い機会を確認"
-    if injury_type in {"価格負傷", "役割負傷", "構造負傷"}:
+    if injury_type in {"価格負傷", "役割負傷", "複合負傷", "構造負傷"}:
         return "次回監査で重点確認"
     return "固定比率と既存ルールを維持"
 
@@ -147,7 +175,7 @@ def _next_checkpoint(row: dict[str, Any]) -> str:
         return f"{row['asset']}の追加買い候補判定が継続するか確認する。"
     if row["injury_type"] == "機会判定":
         return f"{row['asset']}の機会判定が継続するか確認する。"
-    return f"{row['asset']}の{row['wound_label']}が継続するか確認する。"
+    return f"{row['asset']}の{row['injury_type']}が継続するか確認する。"
 
 
 def _correlation_integrity(audits: list[AssetAuditInput]) -> tuple[float, bool]:
@@ -215,12 +243,14 @@ def run_integrated_audit(
         penalty = penalty_multiplier(audit.risk_flags, audit.wound_level)
         confidence_level = normalized_confidence_level(audit.confidence_level)
         role_evidence_score = round(clamp(audit.role_health_score * penalty), 2)
+        final_score = _numeric_metric(audit.supporting_metrics, "final_score")
+        wound_evidence_score = round(clamp((final_score if final_score is not None else audit.role_health_score) * penalty), 2)
         internal_score = round(clamp(role_evidence_score * confidence_multiplier(confidence_level)), 2)
         score = round(clamp(internal_score * regime), 2)
         level = health_level_for(score)
-        # 市場気象や低信頼だけでは負傷としない。負傷は役割証拠と構造フラグで判定する。
-        wound = classify_wound(role_evidence_score, audit.risk_flags, audit.wound_level)
-        injury_type = _injury_type(audit.audit_engine, wound)
+        # 市場気象や低信頼だけでは負傷としない。負傷度はfinal scoreと構造フラグで判定する。
+        wound = classify_wound(wound_evidence_score, audit.risk_flags, audit.wound_level)
+        injury_type = _injury_type(audit, wound)
         row = {
             "asset": audit.asset, "audit_engine": audit.audit_engine, "asset_health_score": score, "internal_health_score": internal_score, "role_evidence_score": role_evidence_score, "health_level": level,
             "health_label": HEALTH_LABELS_JA[level], "display_status": _display_status(audit.audit_engine, wound, HEALTH_LABELS_JA[level]), "wound_level": wound, "wound_label": WOUND_TYPE_LABELS_JA[wound], "injury_type": injury_type,

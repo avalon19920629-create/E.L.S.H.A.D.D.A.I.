@@ -92,3 +92,19 @@ def test_json_write_failure_does_not_stop_existing_production_outputs(tmp_path, 
     manifest = json.loads(paths["manifest_json"].read_text(encoding="utf-8"))
     assert any("failed to write el_shaddai_lumus8_audit.json" in warning for warning in manifest["warnings"])
     assert "el_shaddai_lumus8_audit.json" not in manifest["artifacts"].values()
+
+
+def test_asset_audits_pass_role_score_as_role_health_and_preserve_oracle_fallback():
+    from el_shaddai.production import _asset_audits
+
+    details = SimpleNamespace(components={}, core_score=50)
+    scores = [
+        SimpleNamespace(asset="DBC", price_score=42, role_score=85, el_shaddai_score=42, main_reason="dbc", data_date="2026-06-08", price_details=details, role_details=details),
+        SimpleNamespace(asset="VT", price_score=42, role_score=None, el_shaddai_score=42, main_reason="vt", data_date="2026-06-08", price_details=details, role_details=details),
+    ]
+
+    by_asset = {audit.asset: audit for audit in _asset_audits(scores)}
+
+    assert by_asset["DBC"].role_health_score == 85
+    assert by_asset["DBC"].supporting_metrics["final_score"] == 42
+    assert by_asset["VT"].role_health_score == 42

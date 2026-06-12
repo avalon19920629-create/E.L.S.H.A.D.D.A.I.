@@ -116,7 +116,7 @@ def _asset_audits(scores: list[AssetScore]) -> list[AssetAuditInput]:
         AssetAuditInput(
             asset=score.asset,
             audit_engine=AUDIT_ENGINES[score.asset],
-            role_health_score=score.el_shaddai_score,
+            role_health_score=score.role_score if score.role_score is not None else score.el_shaddai_score,
             raw_score=score.el_shaddai_score,
             confidence_level=3,
             diagnosis_summary=score.main_reason,

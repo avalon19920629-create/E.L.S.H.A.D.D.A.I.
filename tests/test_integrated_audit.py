@@ -121,3 +121,53 @@ def test_low_confidence_alone_does_not_create_wounds_or_aggressive_action():
     assert result["wounded_assets"] == []
     assert result["action_level"] <= 1
     assert "平均信頼度が低いため" in result["hysteresis_note"]
+
+
+def _dimensioned_audit(asset, engine, price_score, role_score, final_score, *, risk_flags=None):
+    return AssetAuditInput(
+        asset,
+        engine,
+        role_score,
+        risk_flags=risk_flags or [],
+        supporting_metrics={"price_score": price_score, "role_score": role_score, "final_score": final_score},
+    )
+
+
+def test_injury_type_uses_price_role_and_final_score_dimensions():
+    inputs = [
+        _dimensioned_audit("DBC", "G.A.I.A.", 42, 85, 42),
+        _dimensioned_audit("TLT", "L.O.D.E.", 70, 39, 39),
+        _dimensioned_audit("TIP", "I.N.F.E.R.N.O.", 35, 38, 35),
+    ]
+
+    result = run_integrated_audit(inputs, PortfolioInput({"DBC": 1 / 3, "TLT": 1 / 3, "TIP": 1 / 3}))
+    by_asset = {row["asset"]: row for row in result["asset_health_rank"]}
+
+    assert by_asset["DBC"]["injury_type"] == "価格負傷"
+    assert by_asset["DBC"]["role_evidence_score"] == 85
+    assert "DBCの価格負傷が継続するか確認する。" in result["next_checkpoints"]
+    assert by_asset["TLT"]["injury_type"] == "役割負傷"
+    assert by_asset["TIP"]["injury_type"] == "複合負傷"
+    assert result["injury_breakdown"] == {"価格負傷": 1, "役割負傷": 1, "複合負傷": 1}
+
+
+def test_structural_flags_take_priority_over_dimensioned_injury_type():
+    audit = _dimensioned_audit("XLRE", "A.R.C.A.D.I.A.", 42, 55, 42, risk_flags=["role_impairment"])
+
+    result = run_integrated_audit([audit], PortfolioInput({"XLRE": 1.0}))
+
+    assert result["asset_health_rank"][0]["injury_type"] == "構造負傷"
+
+
+def test_oracle_opportunity_labels_are_preserved_with_dimension_metrics():
+    inputs = [
+        AssetAuditInput("VT", "O.R.A.C.L.E.", 42, supporting_metrics={"price_score": 42, "role_score": None, "final_score": 42}),
+        AssetAuditInput("BTC", "O.R.A.C.L.E.", 80, supporting_metrics={"price_score": 80, "role_score": None, "final_score": 80}),
+    ]
+
+    result = run_integrated_audit(inputs, PortfolioInput({"VT": 0.5, "BTC": 0.5}))
+    by_asset = {row["asset"]: row for row in result["asset_health_rank"]}
+
+    assert by_asset["VT"]["injury_type"] == "追加買い判定"
+    assert by_asset["BTC"]["injury_type"] == "機会判定"
+    assert result["wounded_assets"] == []
