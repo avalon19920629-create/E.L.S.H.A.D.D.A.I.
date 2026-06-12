@@ -87,7 +87,8 @@ def test_full_lumus8_fixture_covers_all_assets_without_insufficient_context():
     assert all(contexts[asset]["context_label"] != "insufficient_context" for asset in {"BNDX", "TIP", "GLDM"})
     assert contexts["DBC"]["context_label"] == "context_explained_weakness"
     assert contexts["BTC"]["context_label"] == "context_divergence"
-    assert all(item["confidence"] == "medium" for item in contexts.values())
+    assert all(item["confidence"] != "low" for item in contexts.values())
+    assert contexts["TIP"]["relevant_warnings"] == ["inflation_air_mass_negative", "real_rate_shock"]
 
 
 def test_full_lumus8_outputs_remain_advisory_only(tmp_path):
@@ -121,7 +122,10 @@ def test_fred_success_does_not_lower_parallax_confidence_like_fred_failure():
     market["market_warnings"] = []
     market["data_status"] = {"status": "OK"}
     audit["warnings"] = []
-    audit["audit_completeness"] = {"fred_data_status": "OK", "degraded_adapters": [], "failed_adapters": []}
+    audit["audit_completeness"] = {"fred_data_status": "OK", "fred_provider": "fredapi", "degraded_adapters": [], "failed_adapters": []}
+    for asset in audit["assets"]:
+        asset["warnings"] = []
+        asset["oracle_details"] = {}
 
     successful = build_parallax_report(market, audit)
     assert all(item["confidence"] == "high" for item in successful["asset_contexts"])
@@ -129,3 +133,94 @@ def test_fred_success_does_not_lower_parallax_confidence_like_fred_failure():
     audit["audit_completeness"] = {"fred_data_status": "failed", "degraded_adapters": ["TLT", "TIP"], "failed_adapters": ["TLT", "TIP"]}
     failed = build_parallax_report(market, audit)
     assert all(item["confidence"] == "low" for item in failed["asset_contexts"])
+
+
+def _fred_ok_with_clean_asset_warnings(market, audit):
+    market["data_status"] = {"status": "OK"}
+    audit["audit_completeness"] = {
+        "price_data_status": "OK",
+        "fred_data_status": "OK",
+        "fred_provider": "fredapi",
+        "degraded_adapters": [],
+        "failed_adapters": [],
+    }
+    for asset in audit["assets"]:
+        asset["warnings"] = []
+        asset["oracle_details"] = {}
+
+
+def test_fred_ok_and_scoped_warnings_do_not_make_all_assets_low():
+    market, audit = _inputs()
+    _fred_ok_with_clean_asset_warnings(market, audit)
+    market["market_warnings"] = ["inflation_air_mass_negative", "btc_downdraft_under_risk_on_sensor"]
+    audit["warnings"] = [
+        "warning: O.R.A.C.L.E. live mode uses price/VIX only in v1.7; unavailable fields use neutral fallback.",
+        "warning: O.R.A.C.L.E. BTC value inputs unavailable; neutral 50 fallback applied.",
+        "warning: I.N.F.E.R.N.O. severe penalty proxy detected: real_rate_shock",
+    ]
+
+    contexts = {item["asset"]: item for item in build_parallax_report(market, audit)["asset_contexts"]}
+
+    assert contexts["TLT"]["confidence"] == "high"
+    assert contexts["BNDX"]["confidence"] == "high"
+    assert contexts["XLRE"]["confidence"] == "high"
+    assert contexts["DBC"]["confidence"] == "medium"
+    assert contexts["GLDM"]["confidence"] == "medium"
+    assert any(item["confidence"] != "low" for item in contexts.values())
+
+
+def test_oracle_warnings_are_scoped_to_vt_and_btc():
+    market, audit = _inputs()
+    _fred_ok_with_clean_asset_warnings(market, audit)
+    market["market_warnings"] = []
+    audit["warnings"] = [
+        "warning: O.R.A.C.L.E. live mode uses price/VIX only in v1.7; unavailable fields use neutral fallback.",
+        "warning: O.R.A.C.L.E. VT value inputs unavailable; neutral 50 fallback applied.",
+        "warning: O.R.A.C.L.E. BTC cycle inputs unavailable; neutral 50 fallback applied.",
+    ]
+
+    contexts = {item["asset"]: item for item in build_parallax_report(market, audit)["asset_contexts"]}
+
+    assert contexts["VT"]["confidence"] == "medium"
+    assert contexts["BTC"]["confidence"] == "medium"
+    assert all(contexts[asset]["confidence"] == "high" for asset in {"TLT", "BNDX", "TIP", "GLDM", "DBC", "XLRE"})
+    assert all("O.R.A.C.L.E." in warning for warning in contexts["VT"]["relevant_warnings"])
+
+
+def test_market_amedas_warnings_are_scoped_to_related_assets():
+    market, audit = _inputs()
+    _fred_ok_with_clean_asset_warnings(market, audit)
+    audit["warnings"] = []
+    market["market_warnings"] = ["inflation_air_mass_negative", "btc_downdraft_under_risk_on_sensor"]
+
+    contexts = {item["asset"]: item for item in build_parallax_report(market, audit)["asset_contexts"]}
+
+    assert all(contexts[asset]["confidence"] == "medium" for asset in {"BTC", "TIP", "DBC", "GLDM"})
+    assert all(contexts[asset]["confidence"] == "high" for asset in {"VT", "TLT", "BNDX", "XLRE"})
+
+
+def test_inferno_warning_is_scoped_to_tip_and_inflation_defense_group():
+    market, audit = _inputs()
+    _fred_ok_with_clean_asset_warnings(market, audit)
+    market["market_warnings"] = []
+    audit["warnings"] = ["warning: I.N.F.E.R.N.O. severe penalty proxy detected: macro_submission"]
+
+    report = build_parallax_report(market, audit)
+    contexts = {item["asset"]: item for item in report["asset_contexts"]}
+
+    assert contexts["TIP"]["confidence"] == "medium"
+    assert all(contexts[asset]["confidence"] == "high" for asset in {"BNDX", "TLT", "XLRE", "DBC", "GLDM"})
+    assert report["group_contexts"]["inflation_defense"]["warnings"] == audit["warnings"]
+
+
+def test_global_failure_still_lowers_every_asset():
+    market, audit = _inputs()
+    _fred_ok_with_clean_asset_warnings(market, audit)
+    market["market_warnings"] = []
+    audit["warnings"] = []
+    audit["audit_completeness"]["failed_adapters"] = ["L.O.D.E."]
+
+    report = build_parallax_report(market, audit)
+
+    assert report["global_critical_warnings"]
+    assert all(item["confidence"] == "low" for item in report["asset_contexts"])
