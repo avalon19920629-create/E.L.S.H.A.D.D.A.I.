@@ -13,6 +13,19 @@ DEFAULT_FRED_PAUSE = 1.0
 DEFAULT_FRED_TIMEOUT = 60.0
 
 
+def resolve_fred_provider(configured_provider: str = "pandas_datareader") -> str:
+    """Return the provider that will be used without exposing the API key.
+
+    A non-empty ``FRED_API_KEY`` always opts the live retrieval path into
+    ``fredapi``.  Without a key, the configured provider is preserved so
+    existing keyless FredReader and explicit fredapi behavior remain intact.
+    """
+
+    if os.environ.get("FRED_API_KEY"):
+        return "fredapi"
+    return configured_provider
+
+
 def fetch_fred_series_rows(
     series_ids: Sequence[str],
     start: str | date,
@@ -23,12 +36,13 @@ def fetch_fred_series_rows(
     timeout: float = DEFAULT_FRED_TIMEOUT,
     provider: str = "pandas_datareader",
 ) -> list[dict[str, Any]]:
-    """Fetch and forward-fill FRED series, preferring keyless FredReader.
+    """Fetch and forward-fill FRED series through the effective provider.
 
-    ``fredapi`` remains an explicit optional provider and reads its key only
-    from the ``FRED_API_KEY`` environment variable.
+    When ``FRED_API_KEY`` is present, ``fredapi`` takes precedence over the
+    configured provider.  Otherwise the configured provider is preserved.
     """
 
+    provider = resolve_fred_provider(provider)
     start_text = start.isoformat() if isinstance(start, date) else str(start)
     end_text = end.isoformat() if isinstance(end, date) else str(end)
     if provider == "pandas_datareader":

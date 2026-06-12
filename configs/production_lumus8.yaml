@@ -4,7 +4,7 @@ price_data:
   provider: yfinance
   period: 5y
 fred:
-  # Keyless FredReader is the default; set provider: fredapi and FRED_API_KEY only when desired.
+  # FRED_API_KEY automatically selects fredapi; without a key this configured provider is preserved.
   provider: pandas_datareader
   retry_count: 3
   pause: 1.0

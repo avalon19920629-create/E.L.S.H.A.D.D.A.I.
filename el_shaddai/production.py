@@ -12,6 +12,7 @@ from .arcadia_adapter import latest_xlre_role_inputs
 from .atlas_adapter import latest_bndx_role_inputs
 from .aura_adapter import latest_gldm_role_inputs
 from .config import ASSETS, DEFAULT_ROLE_INPUTS
+from .fred_data import resolve_fred_provider
 from .gaia_adapter import latest_dbc_role_inputs
 from .inferno_adapter import latest_tip_role_inputs
 from .integrated_audit import run_integrated_audit
@@ -188,10 +189,11 @@ def run_production(config_path: str | Path, output_dir: str | Path) -> dict[str,
         asset for asset, result in adapter_results.items()
         if getattr(result, "degraded", False) and not _adapter_succeeded(result)
     ]
+    effective_fred_provider = resolve_fred_provider(config.fred_provider)
     integrated = run_integrated_audit(
         _asset_audits(scores), PortfolioInput(dict(config.target_weights)),
         data_runtime={
-            "fred_provider": config.fred_provider,
+            "fred_provider": effective_fred_provider,
             "degraded_assets": degraded_assets,
             "failed_adapters": failed_adapters,
         },
