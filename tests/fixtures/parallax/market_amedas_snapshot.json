@@ -1,0 +1,17 @@
+{
+  "schema_version": "market_amedas_snapshot.v1",
+  "regime": {"net_air_mass": 0.42, "positive_only_ratio": 0.7, "dominant_air_mass": "yield", "secondary_air_mass": "growth"},
+  "btc_sensor": {"mode": "risk_on", "label": "リスクオン"},
+  "atmospheric_conditions": {
+    "growth": {"state": "上昇優勢", "score": 0.55},
+    "yield": {"state": "上昇優勢", "score": 0.71},
+    "inflation": {"state": "下降優勢", "score": -0.4},
+    "defense": {"state": "下降優勢", "score": -0.2}
+  },
+  "flows": {
+    "updrafts": [{"key": "reit", "score": 0.31}],
+    "downdrafts": [{"key": "btc", "score": -0.22}, {"key": "commodity", "score": -0.0765}, {"key": "gold", "score": -0.1}]
+  },
+  "market_warnings": ["inflation_air_mass_negative"],
+  "data_status": {"status": "OK"}
+}
