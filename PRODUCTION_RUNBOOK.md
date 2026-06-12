@@ -85,6 +85,15 @@ python run_el_shaddai_production.py --help
 
 ## FRED resilience (L.O.D.E. / I.N.F.E.R.N.O.)
 
-Production uses `pandas_datareader.fred.FredReader` without an API key by default. The shared FRED settings are under `fred` in `configs/production_lumus8.yaml`: `retry_count` (default `3`), `pause` (default `1.0` seconds), `timeout` (default `60` seconds), and `cache_dir`. If `cache_dir` is omitted, the runner stores last-successful responses under `<output_dir>/fred_cache`; a Google Drive path can be configured directly in Colab.
+When the `FRED_API_KEY` environment variable is non-empty, production automatically prefers `fredapi` for both L.O.D.E. and I.N.F.E.R.N.O., regardless of the configured keyless provider. In Colab, install `fredapi` and set the secret before running El Shaddai:
 
-The fallback order is live FRED, last-successful cache, then neutral proxy. Cache-backed results are reported with `source=cache`, `degraded=true`, and `stale_days`; neutral results are also marked degraded and appear in manifest `failed_adapters`. To opt into `fredapi`, set `fred.provider: fredapi` and provide the key only through the `FRED_API_KEY` environment variable. No automatic trading or continuous monitoring is performed.
+```python
+%pip install -q fredapi
+import os
+from google.colab import userdata
+os.environ["FRED_API_KEY"] = userdata.get("FRED_API_KEY")
+```
+
+Without a key, production preserves the provider configured under `fred` in `configs/production_lumus8.yaml` (`pandas_datareader` by default). The shared settings also include `retry_count` (default `3`), `pause` (default `1.0` seconds), `timeout` (default `60` seconds), and `cache_dir`. If `cache_dir` is omitted, the runner stores last-successful responses under `<output_dir>/fred_cache`; a Google Drive path can be configured directly in Colab.
+
+The fallback order is live FRED, last-successful cache, then neutral proxy. Warnings identify the failed live provider. Cache-backed results are reported with `source=cache`, `degraded=true`, and `stale_days`; neutral results are also marked degraded and appear in manifest `failed_adapters`, which may reduce downstream Parallax confidence. No automatic trading, automatic selling, or continuous monitoring is performed.

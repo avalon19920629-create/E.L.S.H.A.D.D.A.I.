@@ -114,3 +114,18 @@ def test_full_lumus8_outputs_remain_advisory_only(tmp_path):
         "自動売却を実行",
     ]
     assert not any(instruction in markdown for instruction in forbidden_instructions)
+
+
+def test_fred_success_does_not_lower_parallax_confidence_like_fred_failure():
+    market, audit = _inputs()
+    market["market_warnings"] = []
+    market["data_status"] = {"status": "OK"}
+    audit["warnings"] = []
+    audit["audit_completeness"] = {"fred_data_status": "OK", "degraded_adapters": [], "failed_adapters": []}
+
+    successful = build_parallax_report(market, audit)
+    assert all(item["confidence"] == "high" for item in successful["asset_contexts"])
+
+    audit["audit_completeness"] = {"fred_data_status": "failed", "degraded_adapters": ["TLT", "TIP"], "failed_adapters": ["TLT", "TIP"]}
+    failed = build_parallax_report(market, audit)
+    assert all(item["confidence"] == "low" for item in failed["asset_contexts"])

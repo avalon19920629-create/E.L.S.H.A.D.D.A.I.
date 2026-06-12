@@ -16,7 +16,7 @@ from typing import Dict, Iterable, List, Mapping, Optional, Sequence
 from .config import DEFAULT_ROLE_INPUTS
 from .fred_data import (
     DEFAULT_FRED_PAUSE, DEFAULT_FRED_RETRY_COUNT, DEFAULT_FRED_TIMEOUT,
-    fetch_fred_series_rows, load_fred_cache, save_fred_cache,
+    fetch_fred_series_rows, load_fred_cache, resolve_fred_provider, save_fred_cache,
 )
 
 INFERNO_FRED_SERIES: Mapping[str, str] = {
@@ -271,6 +271,7 @@ def latest_tip_role_inputs(
     fred_provider: str = "pandas_datareader",
 ) -> InfernoResult:
     """Use live FRED, then last-successful cache, then neutral fallback."""
+    effective_provider = resolve_fred_provider(fred_provider)
     try:
         rows = fetch_inferno_fred_data(start, end, retry_count=retry_count, pause=pause, timeout=timeout, provider=fred_provider)
         result = compute_tip_role_proxies(rows)
@@ -283,9 +284,9 @@ def latest_tip_role_inputs(
                 rows, stale_days, path = load_fred_cache(cache_dir, "inferno")
                 result = compute_tip_role_proxies(rows)
                 if result.used_inferno:
-                    warning = f"warning: live I.N.F.E.R.N.O. FRED fetch failed ({exc}); using last successful cache {path} ({stale_days} stale days)."
+                    warning = f"warning: live I.N.F.E.R.N.O. FRED fetch via {effective_provider} failed ({exc}); using last successful cache {path} ({stale_days} stale days)."
                     return InfernoResult(result.role_inputs, result.proxies, result.reasons, result.warnings + [warning], result.data_date, "cache", True, result.inflation_regime_interpretation, result.applied_caps, True, stale_days)
             except Exception:
                 pass
-        neutral = _neutral_result([f"warning: failed to fetch I.N.F.E.R.N.O. FRED data ({exc}); no usable cache; neutral TIP Role proxy fallback applied."])
+        neutral = _neutral_result([f"warning: failed to fetch I.N.F.E.R.N.O. FRED data via {effective_provider} ({exc}); no usable cache; neutral TIP Role proxy fallback applied."])
         return InfernoResult(neutral.role_inputs, neutral.proxies, neutral.reasons, neutral.warnings, neutral.data_date, neutral.source, neutral.used_inferno, neutral.inflation_regime_interpretation, neutral.applied_caps, True, None)

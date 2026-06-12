@@ -689,3 +689,28 @@ python run_parallax.py \
 ```
 
 出力は `parallax_context_report.json` と `parallax_context_report.md` です。どちらかの入力ファイルが欠損していても処理は停止せず、利用可能な範囲で `insufficient_context` レポートを生成します。
+
+## Colab production FRED setup (L.O.D.E. / I.N.F.E.R.N.O.)
+
+L.O.D.E.（TLT）と I.N.F.E.R.N.O.（TIP）の live FRED 取得は、`FRED_API_KEY` 環境変数が設定されている場合、production config の `fred.provider` よりも `fredapi` を優先します。Colab では El Shaddai 実行前に次を実行してください。
+
+```python
+%pip install -q fredapi
+
+import os
+from google.colab import userdata
+
+os.environ["FRED_API_KEY"] = userdata.get("FRED_API_KEY")
+print("FRED_API_KEY is set:", bool(os.environ.get("FRED_API_KEY")))
+```
+
+手入力する場合は次のように設定できます。
+
+```python
+from getpass import getpass
+import os
+
+os.environ["FRED_API_KEY"] = getpass("FRED_API_KEY: ")
+```
+
+API キーを設定しない場合は、設定済みの既存 provider（既定値は keyless `pandas_datareader`）を使用します。live FRED 取得に失敗しても監査全体は停止せず、last-successful cache、続いて neutral TLT/TIP Role proxy の順に fallback します。neutral fallback が使用されると L.O.D.E. / I.N.F.E.R.N.O. adapter は degraded / failed として記録され、Parallax Engine の confidence が低下する可能性があります。出力は引き続き助言専用で、自動売買・自動売却には接続しません。

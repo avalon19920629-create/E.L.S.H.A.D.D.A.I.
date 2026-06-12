@@ -16,7 +16,7 @@ from typing import Dict, Iterable, List, Mapping, Optional, Sequence
 from .config import DEFAULT_ROLE_INPUTS
 from .fred_data import (
     DEFAULT_FRED_PAUSE, DEFAULT_FRED_RETRY_COUNT, DEFAULT_FRED_TIMEOUT,
-    fetch_fred_series_rows, load_fred_cache, save_fred_cache,
+    fetch_fred_series_rows, load_fred_cache, resolve_fred_provider, save_fred_cache,
 )
 
 FRED_SERIES: Mapping[str, str] = {
@@ -236,6 +236,7 @@ def latest_tlt_role_inputs(
     fred_provider: str = "pandas_datareader",
 ) -> LodeResult:
     """Use live FRED, then last-successful cache, then neutral fallback."""
+    effective_provider = resolve_fred_provider(fred_provider)
     try:
         rows = fetch_lode_fred_data(start, end, retry_count=retry_count, pause=pause, timeout=timeout, provider=fred_provider)
         result = compute_tlt_role_proxies(rows)
@@ -248,10 +249,10 @@ def latest_tlt_role_inputs(
                 rows, stale_days, path = load_fred_cache(cache_dir, "lode")
                 result = compute_tlt_role_proxies(rows)
                 if result.used_lode:
-                    warning = f"warning: live L.O.D.E. FRED fetch failed ({exc}); using last successful cache {path} ({stale_days} stale days)."
+                    warning = f"warning: live L.O.D.E. FRED fetch via {effective_provider} failed ({exc}); using last successful cache {path} ({stale_days} stale days)."
                     return LodeResult(result.role_inputs, result.proxies, result.reasons, result.warnings + [warning], result.data_date, "cache", True, True, stale_days)
             except Exception:
                 pass
         neutral = {name: float(DEFAULT_ROLE_INPUTS["TLT"].get(name, 0.0)) for name in TLT_LODE_COMPONENTS}
-        warning = f"warning: failed to fetch L.O.D.E. FRED data ({exc}); no usable cache; neutral TLT Role proxy fallback applied."
+        warning = f"warning: failed to fetch L.O.D.E. FRED data via {effective_provider} ({exc}); no usable cache; neutral TLT Role proxy fallback applied."
         return LodeResult({"TLT": neutral}, neutral, {}, [warning], "unknown", "L.O.D.E. FRED", False, True, None)
