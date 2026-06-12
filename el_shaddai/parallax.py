@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 SCHEMA_VERSION = "parallax_context_report.v1"
+ENGINE_VERSION = "0.1.1"
 MARKET_SCHEMA_VERSION = "market_amedas_snapshot.v1"
 EL_SHADDAI_SCHEMA_VERSION = "el_shaddai_lumus8_audit.v1"
 SAFETY_NOTICE = "本レポートはMarket AmedasとEl Shaddaiの出力を照合する補助診断であり、自動売買・自動売却・配分変更を意味しない。"
@@ -154,19 +155,81 @@ def _status_text_values(value: Any) -> list[str]:
     return [str(value).lower()] if isinstance(value, str) else []
 
 
-def _base_confidence(market: Mapping[str, Any], audit: Mapping[str, Any], warnings: Sequence[str]) -> str:
+def _nonempty_list(value: Any) -> list[Any]:
+    return list(value) if isinstance(value, Sequence) and not isinstance(value, (str, bytes)) else []
+
+
+def _status_is_ng(value: Any) -> bool:
+    return any(
+        any(token in text for token in ("ng", "missing", "failed", "incomplete", "error", "欠損", "未入力", "不完全"))
+        for text in _status_text_values(value)
+    )
+
+
+def _global_critical_warnings(market: Mapping[str, Any], audit: Mapping[str, Any], warnings: Sequence[str]) -> list[str]:
+    """Return only failures severe enough to reduce every asset to low confidence."""
+    critical = list(warnings)
+    if not market:
+        critical.append("Market Amedas input is missing")
+    elif market.get("schema_version") != MARKET_SCHEMA_VERSION:
+        critical.append("Market Amedas schema不正")
+    if not audit:
+        critical.append("El Shaddai input is missing")
+    elif audit.get("schema_version") != EL_SHADDAI_SCHEMA_VERSION:
+        critical.append("El Shaddai schema不正")
+
     market_status = market.get("data_status", {})
-    audit_status = audit.get("audit_completeness", audit.get("data_status", {}))
-    status_values = _status_text_values([market_status, audit_status])
-    if any(any(token in value for token in ("missing", "failed", "incomplete", "欠損", "未入力", "不完全")) for value in status_values):
+    completeness = audit.get("audit_completeness", audit.get("data_status", {}))
+    if _status_is_ng(market_status):
+        critical.append("Market Amedas data_status is not usable")
+    if _status_is_ng(completeness.get("status")):
+        critical.append("El Shaddai audit completeness is not usable")
+    for field in ("price_data_status", "fred_data_status"):
+        if field in completeness and _status_is_ng(completeness.get(field)):
+            critical.append(f"El Shaddai {field} is not usable")
+    failed = _nonempty_list(completeness.get("failed_adapters", [])) if isinstance(completeness, Mapping) else []
+    if failed:
+        critical.append(f"El Shaddai failed_adapters: {', '.join(map(str, failed))}")
+    severe_degraded = [item for item in _nonempty_list(completeness.get("degraded_adapters", [])) if "severe" in str(item).lower() or "critical" in str(item).lower()]
+    if severe_degraded:
+        critical.append(f"El Shaddai severe degraded_adapters: {', '.join(map(str, severe_degraded))}")
+    return list(dict.fromkeys(map(str, critical)))
+
+
+def _warning_targets(warning: str) -> set[str]:
+    """Map known source warnings to the assets whose evidence they qualify."""
+    text = warning.lower()
+    if "o.r.a.c.l.e." in text:
+        if " vt " in f" {text} ":
+            return {"VT"}
+        if " btc " in f" {text} ":
+            return {"BTC"}
+        if "live mode uses price/vix only" in text:
+            return {"VT", "BTC"}
+    if "i.n.f.e.r.n.o." in text and any(token in text for token in ("real_rate_shock", "macro_submission", "severe penalty")):
+        return {"TIP"}
+    if "inflation_air_mass_negative" in text:
+        return {"TIP", "DBC", "GLDM"}
+    if "btc_downdraft_under_risk_on_sensor" in text:
+        return {"BTC"}
+    return set()
+
+
+def _relevant_warnings(asset: str, source_warnings: Sequence[str], asset_data: Mapping[str, Any]) -> list[str]:
+    relevant = [warning for warning in map(str, source_warnings) if asset in _warning_targets(warning)]
+    relevant.extend(str(item) for item in _nonempty_list(asset_data.get("warnings", [])) if item)
+    return list(dict.fromkeys(relevant))
+
+
+def _asset_confidence(global_critical: Sequence[str], relevant_warnings: Sequence[str]) -> str:
+    if global_critical:
         return "low"
-    source_warnings = list(market.get("market_warnings", []) or []) + list(audit.get("warnings", []) or [])
-    if warnings or source_warnings or any("warning" in value or "警告" in value for value in status_values):
+    if relevant_warnings:
         return "medium"
     return "high"
 
 
-def _classify_asset(asset: Mapping[str, Any], market: Mapping[str, Any], confidence: str) -> dict[str, Any]:
+def _classify_asset(asset: Mapping[str, Any], market: Mapping[str, Any], confidence: str, relevant_warnings: Sequence[str] = ()) -> dict[str, Any]:
     name = str(asset.get("asset", ""))
     mapping = ASSET_MAP.get(name)
     if not mapping:
@@ -239,6 +302,7 @@ def _classify_asset(asset: Mapping[str, Any], market: Mapping[str, Any], confide
         "context_label": label,
         "severity": severity,
         "confidence": confidence,
+        "relevant_warnings": list(relevant_warnings),
         "market_evidence": {
             "primary_air_mass": primary,
             "primary_air_mass_state": primary_state,
@@ -258,7 +322,7 @@ def _classify_asset(asset: Mapping[str, Any], market: Mapping[str, Any], confide
 def _insufficient_asset(asset: Mapping[str, Any], reason: str) -> dict[str, Any]:
     return {
         "asset": str(asset.get("asset", "unknown")), "context_label": "insufficient_context", "severity": "medium", "confidence": "low",
-        "market_evidence": {}, "asset_evidence": dict(asset), "interpretation": reason, "notes": [], "next_check": "不足している入力を補完して再判定する。",
+        "relevant_warnings": [], "market_evidence": {}, "asset_evidence": dict(asset), "interpretation": reason, "notes": [], "next_check": "不足している入力を補完して再判定する。",
     }
 
 
@@ -270,7 +334,18 @@ def _group_contexts(audit: Mapping[str, Any], contexts: Sequence[Mapping[str, An
             continue
         assets = [str(asset) for asset in group.get("assets", [])]
         labels = [by_asset[asset]["context_label"] for asset in assets if asset in by_asset]
-        groups[str(key)] = {"label": group.get("label", key), "assets": assets, "context_labels": labels, "high_attention": any(label in {"context_divergence", "role_failure_candidate"} for label in labels)}
+        group_warnings = list(dict.fromkeys(
+            warning
+            for asset in assets
+            for warning in by_asset.get(asset, {}).get("relevant_warnings", [])
+            if key != "inflation_defense" or "i.n.f.e.r.n.o." not in warning.lower()
+        ))
+        if key == "inflation_defense":
+            group_warnings.extend(
+                warning for warning in audit.get("warnings", []) or []
+                if "i.n.f.e.r.n.o." in str(warning).lower() and warning not in group_warnings
+            )
+        groups[str(key)] = {"label": group.get("label", key), "assets": assets, "context_labels": labels, "warnings": group_warnings, "high_attention": any(label in {"context_divergence", "role_failure_candidate"} for label in labels)}
     return groups
 
 
@@ -290,11 +365,21 @@ def build_parallax_report(market: Mapping[str, Any] | None, audit: Mapping[str, 
         all_warnings.append("El Shaddai入力が欠損している。")
     market, audit = market or {}, audit or {}
     assets = audit.get("assets", []) if isinstance(audit.get("assets"), list) else []
+    source_warnings = list(market.get("market_warnings", []) or []) + list(audit.get("warnings", []) or [])
+    global_critical = _global_critical_warnings(market, audit, warnings)
+    if audit and not assets:
+        global_critical.append("El Shaddai assets are missing; asset_contexts cannot be built")
     if not market:
         contexts = [_insufficient_asset(asset, "Market Amedas入力が欠損しているため照合できない。") for asset in assets]
     else:
-        confidence = _base_confidence(market, audit, all_warnings)
-        contexts = [_classify_asset(asset, market, confidence) for asset in assets if isinstance(asset, Mapping)]
+        contexts = []
+        for asset in assets:
+            if not isinstance(asset, Mapping):
+                continue
+            name = str(asset.get("asset", ""))
+            relevant = _relevant_warnings(name, source_warnings, asset)
+            confidence = _asset_confidence(global_critical, relevant)
+            contexts.append(_classify_asset(asset, market, confidence, relevant))
     regime = market.get("regime", {}) if isinstance(market.get("regime"), Mapping) else {}
     el_summary = audit.get("summary", {}) if isinstance(audit.get("summary"), Mapping) else {}
     by_label = lambda label: [item["asset"] for item in contexts if item["context_label"] == label]
@@ -303,6 +388,8 @@ def build_parallax_report(market: Mapping[str, Any] | None, audit: Mapping[str, 
     insufficient = by_label("insufficient_context")
     if audit == {}:
         insufficient.append("el_shaddai")
+    elif not assets:
+        insufficient.append("el_shaddai_assets")
     if market == {} and not insufficient:
         insufficient.append("market_amedas")
     critical_candidate = str(el_summary.get("overall_state", "")).startswith("0.") and len(divergence) > 1
@@ -323,10 +410,11 @@ def build_parallax_report(market: Mapping[str, Any] | None, audit: Mapping[str, 
         "insufficient_context": insufficient,
     }
     return {
-        "schema_version": SCHEMA_VERSION, "generated_at": timestamp,
+        "schema_version": SCHEMA_VERSION, "engine_version": ENGINE_VERSION, "generated_at": timestamp,
         "input_versions": {"market_amedas": market.get("schema_version"), "el_shaddai": audit.get("schema_version")},
         "data_status": {"market_amedas_available": bool(market), "el_shaddai_available": bool(audit), "source_market_status": market.get("data_status", {}), "source_audit_completeness": audit.get("audit_completeness", {})},
         "summary": summary, "asset_contexts": contexts, "group_contexts": _group_contexts(audit, contexts),
+        "global_critical_warnings": global_critical,
         "market_findings": list(market.get("market_warnings", []) or []), "warnings": all_warnings,
         "next_check_items": list(audit.get("next_audit_items", []) or []),
         "safety": {"advisory_only": True, "automatic_trading": False, "automatic_selling": False, "allocation_change": False, "score_rewrite": False, "notice": SAFETY_NOTICE},
@@ -335,12 +423,13 @@ def build_parallax_report(market: Mapping[str, Any] | None, audit: Mapping[str, 
 
 def render_markdown(report: Mapping[str, Any]) -> str:
     summary, status = report["summary"], report["data_status"]
-    lines = ["# Parallax Context Report v0.1", "", "## 1. 結論サマリー", f"- Parallax状態: {summary['parallax_state']}", f"- 高注意資産: {', '.join(summary['high_attention_assets']) or 'なし'}", "", "## 2. 市場天候の要約", f"- 主気団: {summary.get('dominant_market_regime') or '不明'}", f"- 副気団: {summary.get('secondary_market_regime') or '不明'}", f"- Market Amedas入力: {'あり' if status['market_amedas_available'] else 'なし'}", "", "## 3. El Shaddai状態の要約", f"- 全体状態: {summary.get('el_shaddai_state') or '不明'}", f"- El Shaddai入力: {'あり' if status['el_shaddai_available'] else 'なし'}", "", "## 4. 資産別Parallax判定", "| Asset | Context | Severity | Confidence | Interpretation |", "| --- | --- | --- | --- | --- |"]
+    lines = [f"# Parallax Context Report v{ENGINE_VERSION}", "", "## 1. 結論サマリー", f"- Parallax状態: {summary['parallax_state']}", f"- 高注意資産: {', '.join(summary['high_attention_assets']) or 'なし'}", "", "## 2. 市場天候の要約", f"- 主気団: {summary.get('dominant_market_regime') or '不明'}", f"- 副気団: {summary.get('secondary_market_regime') or '不明'}", f"- Market Amedas入力: {'あり' if status['market_amedas_available'] else 'なし'}", "", "## 3. El Shaddai状態の要約", f"- 全体状態: {summary.get('el_shaddai_state') or '不明'}", f"- El Shaddai入力: {'あり' if status['el_shaddai_available'] else 'なし'}", "", "## 4. 資産別Parallax判定", "| Asset | Context | Severity | Confidence | Interpretation |", "| --- | --- | --- | --- | --- |"]
     for item in report["asset_contexts"]:
         lines.append(f"| {item['asset']} | {item['context_label']} | {item['severity']} | {item['confidence']} | {item['interpretation']} |")
     lines += ["", "## 5. 役割グループ別Parallax判定"]
     for key, group in report["group_contexts"].items():
-        lines.append(f"- {group['label']} ({key}): {', '.join(group['context_labels']) or '判定なし'}")
+        warning_note = f" / 関連warning: {', '.join(group.get('warnings', []))}" if group.get("warnings") else ""
+        lines.append(f"- {group['label']} ({key}): {', '.join(group['context_labels']) or '判定なし'}{warning_note}")
     lines += ["", "## 6. 注意点"] + [f"- {item}" for item in report["warnings"] or ["特記事項なし"]]
     lines += ["", "## 7. 次回確認項目"] + [f"- {item}" for item in report["next_check_items"] or ["不足入力と高注意資産を次回監査で確認する。"]]
     lines += ["", "## 8. 安全境界", f"- {SAFETY_NOTICE}", "- スコア、気団比率、負傷分類を書き換えない。", "- 予測リターンの断定や投資助言としての売買推奨を行わない。", ""]
