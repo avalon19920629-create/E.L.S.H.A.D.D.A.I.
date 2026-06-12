@@ -51,9 +51,15 @@ def test_run_production_writes_drive_ready_artifacts_without_demo(tmp_path, monk
 
     assert set(paths) == {"scores_csv", "asset_report_markdown", "dashboard_html", "lumus8_report_markdown", "manifest_json"}
     assert all(path.is_file() and path.parent == output_dir.resolve() for path in paths.values())
+    audit_json_path = output_dir / "el_shaddai_lumus8_audit.json"
+    assert audit_json_path.is_file()
+    audit_json = json.loads(audit_json_path.read_text(encoding="utf-8"))
+    assert audit_json["schema_version"] == "el_shaddai_lumus8_audit.v1"
     manifest = json.loads(paths["manifest_json"].read_text(encoding="utf-8"))
     assert manifest["run_type"] == "production_single_audit"
     assert manifest["safety"] == {"advisory_only": True, "automatic_trading": False, "continuous_monitoring": False}
+    assert "integrated_audit_json" not in manifest["artifacts"]
+    assert "el_shaddai_lumus8_audit.json" not in manifest["artifacts"].values()
     report = paths["lumus8_report_markdown"].read_text(encoding="utf-8")
     assert "・FREDデータ：OK（provider: pandas_datareader）" in report
     assert "・Market Amedas：未入力" in report
@@ -64,3 +70,25 @@ def test_run_production_writes_drive_ready_artifacts_without_demo(tmp_path, monk
 def test_production_entrypoint_requires_output_dir():
     with pytest.raises(SystemExit):
         main([])
+
+
+def test_json_write_failure_does_not_stop_existing_production_outputs(tmp_path, monkeypatch):
+    config_path = tmp_path / "production.yaml"
+    output_dir = tmp_path / "reports"
+    _config(config_path)
+    monkeypatch.setattr(
+        "el_shaddai.production.fetch_live_prices",
+        lambda period: ({asset: [100 + day * 0.1 for day in range(320)] for asset in ASSETS}, "2026-06-08"),
+    )
+    monkeypatch.setattr(
+        "el_shaddai.production.write_integrated_audit_json",
+        lambda payload, output_path: (_ for _ in ()).throw(OSError("disk full")),
+    )
+
+    paths = run_production(config_path, output_dir)
+
+    assert set(paths) == {"scores_csv", "asset_report_markdown", "dashboard_html", "lumus8_report_markdown", "manifest_json"}
+    assert all(path.is_file() for path in paths.values())
+    manifest = json.loads(paths["manifest_json"].read_text(encoding="utf-8"))
+    assert any("failed to write el_shaddai_lumus8_audit.json" in warning for warning in manifest["warnings"])
+    assert "el_shaddai_lumus8_audit.json" not in manifest["artifacts"].values()

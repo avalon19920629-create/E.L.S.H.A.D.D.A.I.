@@ -15,6 +15,7 @@ from .config import ASSETS, DEFAULT_ROLE_INPUTS
 from .gaia_adapter import latest_dbc_role_inputs
 from .inferno_adapter import latest_tip_role_inputs
 from .integrated_audit import run_integrated_audit
+from .integrated_audit_json import build_integrated_audit_json, write_integrated_audit_json
 from .lode_adapter import latest_tlt_role_inputs
 from .models import AssetAuditInput, PortfolioInput
 from .oracle_adapter import latest_oracle_inputs
@@ -198,6 +199,16 @@ def run_production(config_path: str | Path, output_dir: str | Path) -> dict[str,
     integrated_path = destination / "el_shaddai_lumus8_audit.md"
     integrated_path.write_text(integrated["report_text"], encoding="utf-8")
     paths["lumus8_report_markdown"] = integrated_path
+
+    # The machine-readable canonical audit is intentionally not added to the
+    # first-version manifest artifacts. Failure must not block legacy outputs.
+    try:
+        audit_json = build_integrated_audit_json(
+            integrated, scores, adapter_results=adapter_results, warnings=warnings, data_date=data_date,
+        )
+        write_integrated_audit_json(audit_json, destination / "el_shaddai_lumus8_audit.json")
+    except Exception as exc:  # pragma: no cover - exact I/O failures are environment-dependent
+        warnings.append(f"warning: failed to write el_shaddai_lumus8_audit.json ({exc})")
 
     manifest_path = destination / "production_run_manifest.json"
     manifest_path.write_text(json.dumps({
