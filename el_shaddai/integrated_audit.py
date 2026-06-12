@@ -106,11 +106,11 @@ def _one_line_summary(text: str, injury_type: str) -> str:
     return summary if len(summary) <= 72 else summary[:69].rstrip() + "..."
 
 
-def _display_status(audit_engine: str, wound_level: int, health_label: str) -> str:
-    """O.R.A.C.L.E.の機会評価を、役割健全度ラベルから表示上分離する。"""
+def _display_status(audit_engine: str, wound_level: int, health_label: str, injury_type: str) -> str:
+    """機会・負傷表示を、別系統の役割健全度ラベルから分離する。"""
     if audit_engine == "O.R.A.C.L.E.":
         return "追加買い候補" if wound_level > 0 else "機会中立"
-    return health_label
+    return injury_type if injury_type == "価格負傷" else health_label
 
 
 def _recommended_action(injury_type: str) -> str:
@@ -184,10 +184,11 @@ def _correlation_integrity(audits: list[AssetAuditInput]) -> tuple[float, bool]:
 
 
 def _role_diagnosis(rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    """役割グループを、資産全体の健全度ではなく役割証拠で診断する。"""
     by_asset = {row["asset"]: row for row in rows}
     result = {}
     for group, assets in ROLE_GROUPS.items():
-        scores = [by_asset[a]["asset_health_score"] for a in assets if a in by_asset]
+        scores = [by_asset[a]["role_evidence_score"] for a in assets if a in by_asset]
         score = mean(scores) if scores else 0.0
         level = health_level_for(score)
         result[group] = {"score": round(score, 1), "level": level, "label": HEALTH_LABELS_JA[level], "assets": assets}
@@ -244,16 +245,18 @@ def run_integrated_audit(
         confidence_level = normalized_confidence_level(audit.confidence_level)
         role_evidence_score = round(clamp(audit.role_health_score * penalty), 2)
         final_score = _numeric_metric(audit.supporting_metrics, "final_score")
-        wound_evidence_score = round(clamp((final_score if final_score is not None else audit.role_health_score) * penalty), 2)
-        internal_score = round(clamp(role_evidence_score * confidence_multiplier(confidence_level)), 2)
-        score = round(clamp(internal_score * regime), 2)
-        level = health_level_for(score)
+        final_score = final_score if final_score is not None else audit.role_health_score
+        asset_internal_score = round(clamp(final_score * penalty * confidence_multiplier(confidence_level)), 2)
+        asset_health_score = round(clamp(asset_internal_score * regime), 2)
+        internal_role_score = round(clamp(role_evidence_score * confidence_multiplier(confidence_level)), 2)
+        asset_level = health_level_for(asset_health_score)
+        role_level = health_level_for(internal_role_score)
         # 市場気象や低信頼だけでは負傷としない。負傷度はfinal scoreと構造フラグで判定する。
-        wound = classify_wound(wound_evidence_score, audit.risk_flags, audit.wound_level)
+        wound = classify_wound(round(clamp(final_score * penalty), 2), audit.risk_flags, audit.wound_level)
         injury_type = _injury_type(audit, wound)
         row = {
-            "asset": audit.asset, "audit_engine": audit.audit_engine, "asset_health_score": score, "internal_health_score": internal_score, "role_evidence_score": role_evidence_score, "health_level": level,
-            "health_label": HEALTH_LABELS_JA[level], "display_status": _display_status(audit.audit_engine, wound, HEALTH_LABELS_JA[level]), "wound_level": wound, "wound_label": WOUND_TYPE_LABELS_JA[wound], "injury_type": injury_type,
+            "asset": audit.asset, "audit_engine": audit.audit_engine, "asset_health_score": asset_health_score, "internal_health_score": asset_internal_score, "role_evidence_score": role_evidence_score, "internal_role_health_score": internal_role_score, "health_level": asset_level,
+            "health_label": HEALTH_LABELS_JA[asset_level], "display_status": _display_status(audit.audit_engine, wound, HEALTH_LABELS_JA[asset_level], injury_type), "role_status": HEALTH_LABELS_JA[role_level], "role_health_label": HEALTH_LABELS_JA[role_level], "wound_level": wound, "wound_label": WOUND_TYPE_LABELS_JA[wound], "injury_type": injury_type,
             "confidence_level": confidence_level, "confidence_label": CONFIDENCE_LABELS_JA[confidence_level],
             "diagnosis_summary": audit.diagnosis_summary, "one_line_summary": _one_line_summary(audit.diagnosis_summary, injury_type), "recommended_action": _recommended_action(injury_type),
             "interpretation_notes": [], "risk_flags": list(audit.risk_flags), "multipliers": {"regime_relevance": regime, "confidence": confidence_multiplier(audit.confidence_level), "penalty": penalty},
@@ -269,7 +272,7 @@ def run_integrated_audit(
     weights = {asset: max(0.0, float(weight)) for asset, weight in portfolio.target_weights.items()}
     total_weight = sum(weights.get(row["asset"], 0) for row in rows)
     weighted_health = (sum(row["asset_health_score"] * weights.get(row["asset"], 0) for row in rows) / total_weight) if total_weight else mean(row["asset_health_score"] for row in rows)
-    internal_weighted_health = (sum(row["internal_health_score"] * weights.get(row["asset"], 0) for row in rows) / total_weight) if total_weight else mean(row["internal_health_score"] for row in rows)
+    internal_weighted_health = (sum(row["internal_role_health_score"] * weights.get(row["asset"], 0) for row in rows) / total_weight) if total_weight else mean(row["internal_role_health_score"] for row in rows)
     present = {row["asset"] for row in rows}
     coverage = mean(sum(asset in present for asset in assets) / len(assets) for assets in ROLE_GROUPS.values())
     role_coverage_factor = 0.70 + 0.30 * coverage
@@ -297,8 +300,8 @@ def run_integrated_audit(
         global_level = min(global_level, 2)
         internal_global_level = min(internal_global_level, 2)
     by_asset = {row["asset"]: row for row in rows}
-    growth_strong = all(by_asset.get(asset, {}).get("internal_health_score", 0) >= 75 for asset in ("VT", "BTC"))
-    defense_broadly_weak = sum(by_asset.get(asset, {}).get("internal_health_score", 100) < 60 for asset in ("TLT", "BNDX", "GLDM")) >= 2
+    growth_strong = all(by_asset.get(asset, {}).get("asset_health_score", 0) >= 75 for asset in ("VT", "BTC"))
+    defense_broadly_weak = sum(by_asset.get(asset, {}).get("asset_health_score", 100) < 60 for asset in ("TLT", "BNDX", "GLDM")) >= 2
     if growth_strong and defense_broadly_weak:
         global_level = min(global_level, 2)
         internal_global_level = min(internal_global_level, 2)

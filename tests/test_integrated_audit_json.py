@@ -84,3 +84,40 @@ def test_write_json_preserves_japanese_utf8(tmp_path):
     raw = path.read_bytes()
     assert "日本語の監査報告".encode("utf-8") in raw
     assert json.loads(raw.decode("utf-8")) == {"message": "日本語の監査報告"}
+
+
+def test_json_and_markdown_health_rank_follow_final_score_not_role_score():
+    from el_shaddai.integrated_audit import run_integrated_audit
+    from el_shaddai.models import AssetAuditInput, PortfolioInput
+
+    scores = [
+        _score("DBC", 42.32, 91.29, 42.32),
+        _score("TIP", 70.0, 30.0, 70.0),
+        _score("GLDM", 60.0, 60.0, 60.0),
+    ]
+    audits = [
+        AssetAuditInput(
+            score.asset,
+            {"DBC": "G.A.I.A.", "TIP": "I.N.F.E.R.N.O.", "GLDM": "A.U.R.A."}[score.asset],
+            score.role_score,
+            supporting_metrics={"price_score": score.price_score, "role_score": score.role_score, "final_score": score.el_shaddai_score},
+        )
+        for score in scores
+    ]
+    integrated = run_integrated_audit(audits, PortfolioInput({"DBC": 1 / 3, "TIP": 1 / 3, "GLDM": 1 / 3}))
+    payload = build_integrated_audit_json(integrated, scores)
+    markdown_assets = [
+        line.split("|")[1].strip()
+        for line in integrated["report_text"].splitlines()
+        if line.startswith("| ") and line.split("|")[1].strip() in {"DBC", "TIP", "GLDM"}
+    ]
+
+    assert [asset["asset"] for asset in payload["assets"]] == ["TIP", "GLDM", "DBC"] == markdown_assets
+    dbc = next(asset for asset in payload["assets"] if asset["asset"] == "DBC")
+    assert dbc["score"] == dbc["final_score"] == 42.32
+    assert dbc["role_score"] == dbc["role_evidence_score"] == 91.29
+    assert dbc["status"] == "価格負傷"
+    assert dbc["role_status"] == "5. 輝ける騎士"
+    assert payload["summary"]["sanctuary_health_score"] == integrated["sanctuary_health_score"]
+    assert payload["summary"]["internal_role_health_score"] == integrated["internal_sanctuary_health_score"]
+    assert payload["summary"]["sanctuary_health_score"] != payload["summary"]["internal_role_health_score"]
