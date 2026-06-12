@@ -129,9 +129,9 @@ def test_next_checkpoints_keep_oracle_opportunities_separate_from_real_wounds():
     assert "VTの追加買い候補判定が継続するか確認する。" in result["next_checkpoints"]
     assert "・BTCの追加買い候補判定が継続するか確認する。" in result["report_text"]
     assert "・VTの追加買い候補判定が継続するか確認する。" in result["report_text"]
-    assert "BTCの1. 価格負傷が継続するか確認する。" not in result["report_text"]
-    assert "VTの1. 価格負傷が継続するか確認する。" not in result["report_text"]
-    assert "TLTの1. 価格負傷が継続するか確認する。" in result["next_checkpoints"]
+    assert "BTCの価格負傷が継続するか確認する。" not in result["report_text"]
+    assert "VTの価格負傷が継続するか確認する。" not in result["report_text"]
+    assert "TLTの価格負傷が継続するか確認する。" in result["next_checkpoints"]
 
 
 def test_report_labels_independent_market_amedas_values_as_strength_not_ratio():
