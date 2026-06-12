@@ -133,18 +133,35 @@ def _lower_confidence(confidence: str) -> str:
     return CONFIDENCES[max(0, CONFIDENCES.index(confidence) - 1)]
 
 
+def _oracle_uses_fallback(details: Any) -> bool:
+    if not isinstance(details, Mapping):
+        return "fallback" in str(details or "").lower()
+    if details.get("fallback") is True:
+        return True
+    return any("fallback" in value for value in _status_text_values(details))
+
+
 def _increase_severity(severity: str) -> str:
     return SEVERITIES[min(len(SEVERITIES) - 1, SEVERITIES.index(severity) + 1)]
+
+
+def _status_text_values(value: Any) -> list[str]:
+    """Return status values without treating field names such as failed_adapters as failures."""
+    if isinstance(value, Mapping):
+        return [text for item in value.values() for text in _status_text_values(item)]
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
+        return [text for item in value for text in _status_text_values(item)]
+    return [str(value).lower()] if isinstance(value, str) else []
 
 
 def _base_confidence(market: Mapping[str, Any], audit: Mapping[str, Any], warnings: Sequence[str]) -> str:
     market_status = market.get("data_status", {})
     audit_status = audit.get("audit_completeness", audit.get("data_status", {}))
-    status_text = json.dumps([market_status, audit_status], ensure_ascii=False).lower()
-    if any(token in status_text for token in ("missing", "failed", "incomplete", "欠損", "未入力", "不完全")):
+    status_values = _status_text_values([market_status, audit_status])
+    if any(any(token in value for token in ("missing", "failed", "incomplete", "欠損", "未入力", "不完全")) for value in status_values):
         return "low"
     source_warnings = list(market.get("market_warnings", []) or []) + list(audit.get("warnings", []) or [])
-    if warnings or source_warnings or "warning" in status_text or "警告" in status_text:
+    if warnings or source_warnings or any("warning" in value or "警告" in value for value in status_values):
         return "medium"
     return "high"
 
@@ -209,7 +226,7 @@ def _classify_asset(asset: Mapping[str, Any], market: Mapping[str, Any], confide
     notes = []
     if asset.get("is_opportunity"):
         notes.append("opportunity_context: El Shaddaiの機会判定を市場文脈と併記する。")
-    if name == "BTC" and "fallback" in json.dumps(asset.get("oracle_details", {}), ensure_ascii=False).lower():
+    if name == "BTC" and _oracle_uses_fallback(asset.get("oracle_details", {})):
         confidence = _lower_confidence(confidence)
         notes.append("O.R.A.C.L.E.入力がneutral fallbackを含むためconfidenceを1段階下げた。")
     special = _has_warning(asset, "currency", "order", "real_rate_shock", "macro_submission", "credit_stress", "reit_relative_strength")

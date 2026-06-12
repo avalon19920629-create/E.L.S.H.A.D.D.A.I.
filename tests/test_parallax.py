@@ -23,7 +23,8 @@ def test_build_report_classifies_required_assets_without_rewriting_scores():
     assert contexts["BTC"]["context_label"] == "context_divergence"
     assert contexts["TLT"]["context_label"] in {"context_explained_weakness", "role_activation_absent"}
     assert contexts["XLRE"]["context_label"] in {"context_divergence", "role_failure_candidate"}
-    assert contexts["DBC"]["asset_evidence"]["final_score"] == audit["assets"][3]["final_score"]
+    source_assets = {item["asset"]: item for item in audit["assets"]}
+    assert contexts["DBC"]["asset_evidence"]["final_score"] == source_assets["DBC"]["final_score"]
     assert report["safety"]["score_rewrite"] is False
 
 
@@ -73,3 +74,43 @@ def test_missing_major_market_fields_returns_insufficient_asset_context():
 
     assert all(item["context_label"] == "insufficient_context" for item in report["asset_contexts"])
     assert all(item["confidence"] == "low" for item in report["asset_contexts"])
+
+
+def test_full_lumus8_fixture_covers_all_assets_without_insufficient_context():
+    market, audit = _inputs()
+    report = build_parallax_report(market, audit)
+    contexts = {item["asset"]: item for item in report["asset_contexts"]}
+    expected_assets = {"VT", "BTC", "TLT", "BNDX", "TIP", "GLDM", "DBC", "XLRE"}
+
+    assert set(contexts) == expected_assets
+    assert len(contexts) == 8
+    assert all(contexts[asset]["context_label"] != "insufficient_context" for asset in {"BNDX", "TIP", "GLDM"})
+    assert contexts["DBC"]["context_label"] == "context_explained_weakness"
+    assert contexts["BTC"]["context_label"] == "context_divergence"
+    assert all(item["confidence"] == "medium" for item in contexts.values())
+
+
+def test_full_lumus8_outputs_remain_advisory_only(tmp_path):
+    market, audit = _inputs()
+    paths = write_parallax_outputs(build_parallax_report(market, audit), tmp_path)
+    payload = json.loads(paths["json"].read_text(encoding="utf-8"))
+    markdown = paths["markdown"].read_text(encoding="utf-8")
+
+    assert payload["safety"] == {
+        "advisory_only": True,
+        "automatic_trading": False,
+        "automatic_selling": False,
+        "allocation_change": False,
+        "score_rewrite": False,
+        "notice": SAFETY_NOTICE,
+    }
+    assert SAFETY_NOTICE in markdown
+    forbidden_instructions = [
+        "購入してください",
+        "売却してください",
+        "買い増してください",
+        "配分を変更してください",
+        "自動売買を実行",
+        "自動売却を実行",
+    ]
+    assert not any(instruction in markdown for instruction in forbidden_instructions)
