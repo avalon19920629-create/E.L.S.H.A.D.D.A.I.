@@ -1,0 +1,16 @@
+{
+  "schema_version": "el_shaddai_lumus8_audit.v1",
+  "audit_completeness": {"status": "OK"},
+  "summary": {"overall_state": "0. 装備不全"},
+  "assets": [
+    {"asset": "VT", "score": 70, "price_score": 70, "final_score": 70, "status": "健全", "is_injured": false, "is_opportunity": false, "warnings": []},
+    {"asset": "BTC", "score": 40, "price_score": 40, "final_score": 40, "status": "追加買い候補", "is_injured": false, "is_opportunity": true, "oracle_details": {"source": "live"}, "warnings": []},
+    {"asset": "TLT", "score": 42, "price_score": 42, "role_score": 60, "final_score": 42, "status": "価格負傷", "injury_type": "価格負傷", "is_injured": true, "warnings": []},
+    {"asset": "DBC", "score": 42.32, "price_score": 42.32, "role_score": 91.29, "final_score": 42.32, "status": "価格負傷", "role_status": "5. 輝ける騎士", "injury_type": "価格負傷", "is_injured": true, "warnings": []},
+    {"asset": "XLRE", "score": 44, "price_score": 44, "role_score": 45, "final_score": 44, "status": "役割負傷", "injury_type": "役割負傷", "is_injured": true, "warnings": ["credit_stress"]}
+  ],
+  "role_groups": {"growth_attack": {"label": "成長・攻撃", "assets": ["VT", "BTC"]}, "real_asset_yield": {"label": "実物資産・利回り", "assets": ["DBC", "XLRE"]}},
+  "next_audit_items": ["BTCとXLREの乖離を確認する。"],
+  "warnings": [],
+  "safety": {"advisory_only": true, "automatic_trading": false}
+}

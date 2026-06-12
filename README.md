@@ -676,3 +676,16 @@ python run_el_shaddai_production.py \
 ```
 
 設定例は `configs/production_lumus8.yaml`、Google Driveのmountを含むColab手順、生成物、警告確認、障害時の扱いは [`PRODUCTION_RUNBOOK.md`](PRODUCTION_RUNBOOK.md) を参照してください。この入口は自動売買・注文執行・常時監視を行いません。
+
+## Parallax Engine v0.1
+
+Parallax Engine は、Market Amedas の市場天候 JSON と El Shaddai の L.U.M.U.S.-8 監査 JSON を照合し、資産状態が市場文脈に支持されるか、説明可能な弱さか、乖離または役割不全候補かをルールベースで分類します。入力側のスコア、気団比率、負傷分類は変更せず、自動売買や配分変更も行いません。
+
+```bash
+python run_parallax.py \
+  --market-amedas market_amedas_snapshot.json \
+  --el-shaddai el_shaddai_lumus8_audit.json \
+  --output-dir reports/parallax
+```
+
+出力は `parallax_context_report.json` と `parallax_context_report.md` です。どちらかの入力ファイルが欠損していても処理は停止せず、利用可能な範囲で `insufficient_context` レポートを生成します。
