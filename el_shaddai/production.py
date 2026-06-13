@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -19,6 +18,7 @@ from .integrated_audit import run_integrated_audit
 from .integrated_audit_json import build_integrated_audit_json, write_integrated_audit_json
 from .lode_adapter import latest_tlt_role_inputs
 from .models import AssetAuditInput, PortfolioInput
+from .production_manifest import SAFETY_BOUNDARY, write_manifest
 from .oracle_adapter import latest_oracle_inputs
 from .report import write_csv, write_markdown
 from .scoring import AssetScore, score_all
@@ -202,32 +202,36 @@ def run_production(config_path: str | Path, output_dir: str | Path) -> dict[str,
     integrated_path.write_text(integrated["report_text"], encoding="utf-8")
     paths["lumus8_report_markdown"] = integrated_path
 
-    # The machine-readable canonical audit is intentionally not added to the
-    # first-version manifest artifacts. Failure must not block legacy outputs.
+    audit_json_path = destination / "el_shaddai_lumus8_audit.json"
     try:
         audit_json = build_integrated_audit_json(
             integrated, scores, adapter_results=adapter_results, warnings=warnings, data_date=data_date,
         )
-        write_integrated_audit_json(audit_json, destination / "el_shaddai_lumus8_audit.json")
+        write_integrated_audit_json(audit_json, audit_json_path)
     except Exception as exc:  # pragma: no cover - exact I/O failures are environment-dependent
         warnings.append(f"warning: failed to write el_shaddai_lumus8_audit.json ({exc})")
 
-    manifest_path = destination / "production_run_manifest.json"
-    manifest_path.write_text(json.dumps({
-        "run_type": "production_single_audit",
-        "executed_at_utc": datetime.now(timezone.utc).isoformat(),
-        "data_date": data_date,
-        "config": asdict(config),
-        "output_dir": str(destination),
-        "warnings": warnings,
-        "degraded_assets": degraded_assets,
-        "failed_adapters": failed_adapters,
-        "adapter_status": {asset: {
-            "source": result.source, "degraded": getattr(result, "degraded", False),
-            "stale_days": getattr(result, "stale_days", None),
-        } for asset, result in adapter_results.items()},
-        "artifacts": {name: str(path) for name, path in paths.items()},
-        "safety": {"advisory_only": True, "automatic_trading": False, "continuous_monitoring": False},
-    }, ensure_ascii=False, indent=2), encoding="utf-8")
+    manifest_path = write_manifest(
+        destination,
+        market_path=destination / "market_amedas_snapshot.json",
+        audit_path=audit_json_path,
+        parallax_path=destination / "parallax_context_report.json",
+        warnings=warnings,
+        base={
+            "run_type": "production_single_audit",
+            "executed_at_utc": datetime.now(timezone.utc).isoformat(),
+            "data_date": data_date,
+            "config": asdict(config),
+            "output_dir": str(destination),
+            "degraded_assets": degraded_assets,
+            "failed_adapters": failed_adapters,
+            "adapter_status": {asset: {
+                "source": result.source, "degraded": getattr(result, "degraded", False),
+                "stale_days": getattr(result, "stale_days", None),
+            } for asset, result in adapter_results.items()},
+            "artifacts": {name: str(path) for name, path in paths.items()},
+            "legacy_safety": {**SAFETY_BOUNDARY, "continuous_monitoring": False},
+        },
+    )
     paths["manifest_json"] = manifest_path
     return paths

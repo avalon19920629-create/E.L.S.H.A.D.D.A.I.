@@ -169,6 +169,7 @@ def test_successful_fred_adapters_are_healthy_and_report_effective_fredapi_provi
     report = paths["lumus8_report_markdown"].read_text(encoding="utf-8")
 
     assert manifest["warnings"] == []
+    assert manifest["warning_summary"] == {"count": 0, "items": []}
     assert manifest["degraded_assets"] == []
     assert manifest["failed_adapters"] == []
     assert manifest["adapter_status"]["TLT"]["degraded"] is False

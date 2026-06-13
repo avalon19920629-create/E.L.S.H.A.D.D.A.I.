@@ -101,3 +101,15 @@ The fallback order is live FRED, last-successful cache, then neutral proxy. Warn
 Parallax Engine v0.1.2 renders internal `severity` values as Japanese confirmation-priority labels in Markdown. `critical` is displayed as `最重要確認`, but this is not a trading, selling, or allocation-change decision. JSON keeps the machine-readable `context_label`, `severity`, and `confidence` values unchanged.
 
 Parallax Engine v0.1.1 scopes non-critical warnings through each asset context’s `relevant_warnings`: O.R.A.C.L.E. warnings primarily qualify VT/BTC confidence, I.N.F.E.R.N.O. severe-penalty warnings primarily qualify TIP, and Market Amedas BTC/inflation warnings qualify their related assets. Only global critical input failures, including an NG FRED/price status or non-empty `failed_adapters`, reduce every asset to low confidence. A successful `fredapi` result with empty degraded/failed adapter lists does not lower TLT/TIP/BNDX solely for FRED reasons.
+
+## Production manifest and quality gate
+
+`production_run_manifest.json` は、単なる成果物一覧ではなく、各 production 監査の「表紙・証跡」です。実行コードの Git commit / branch / dirty 状態、Market Amedas・El Shaddai・Parallax の入力状態、price / FRED / adapter 状態、生成ファイルとサイズ、安全境界、最終 quality gate を一か所で確認できます。Git 情報を取得できない環境でも、監査成果物の生成は継続します。
+
+Parallax runner の最後には `PRODUCTION QUALITY GATE` が表示され、同じ結果が manifest の `quality_gate` に保存されます。
+
+- `pass`: 主要 JSON、price / FRED、adapter、安全境界が正常で、warning がない状態。
+- `warn`: 主要監査は利用可能だが、既知 fallback、degraded adapter、その他の warning を確認すべき状態。
+- `fail`: 主要 JSON 欠損、price / FRED NG、failed adapter、安全境界不整合のいずれかがある未完了状態。
+
+Parallax Markdown の「本日の読みどころ」は、市場文脈との乖離や説明可能な弱さなど、確認優先度を短く要約したものです。売買判断、売却判断、追加投資、配分変更の指示ではありません。
