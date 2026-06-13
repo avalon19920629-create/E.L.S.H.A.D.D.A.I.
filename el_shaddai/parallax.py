@@ -8,6 +8,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
+from .production_manifest import render_quality_gate, write_manifest
+
 SCHEMA_VERSION = "parallax_context_report.v1"
 ENGINE_VERSION = "0.1.2"
 MARKET_SCHEMA_VERSION = "market_amedas_snapshot.v1"
@@ -441,6 +443,7 @@ def build_parallax_report(market: Mapping[str, Any] | None, audit: Mapping[str, 
         "explained_weakness_assets": by_label("context_explained_weakness"),
         "divergence_assets": divergence,
         "role_failure_candidates": failures,
+        "role_activation_absent_assets": by_label("role_activation_absent"),
         "insufficient_context": insufficient,
     }
     return {
@@ -468,6 +471,32 @@ def _warning_display_label(warning: Any) -> str:
     return raw
 
 
+def _reading_highlights(report: Mapping[str, Any]) -> list[str]:
+    """Build a concise, non-prescriptive reading guide from Parallax results."""
+    summary = report.get("summary", {})
+    dominant = summary.get("dominant_market_regime")
+    secondary = summary.get("secondary_market_regime")
+    highlights: list[str] = []
+    if dominant or secondary:
+        dominant_text = dominant or "不明"
+        secondary_text = secondary or "不明"
+        highlights.append(f"主気団は {dominant_text}、副気団は {secondary_text}。この市場文脈を起点に観測する。")
+    high_attention = summary.get("high_attention_assets", [])
+    if high_attention:
+        highlights.append(f"高注意資産は {' / '.join(map(str, high_attention))}。優先的に確認する。")
+    categories = (
+        (summary.get("divergence_assets", []), "市場文脈との乖離があり、優先的に確認する。"),
+        (summary.get("explained_weakness_assets", []), "の弱さは、市場文脈で説明可能。"),
+        (summary.get("role_activation_absent_assets", []), "は役割発動局面ではなく、継続確認する。"),
+    )
+    for assets, message in categories:
+        if assets:
+            highlights.append(f"{' / '.join(map(str, assets))} {message}")
+    if report.get("warnings"):
+        highlights.append("関連warningあり。該当する注意点をあわせて確認する。")
+    return highlights
+
+
 def render_markdown(report: Mapping[str, Any]) -> str:
     summary, status = report["summary"], report["data_status"]
     parallax_state = str(summary["parallax_state"])
@@ -478,6 +507,12 @@ def render_markdown(report: Mapping[str, Any]) -> str:
         "## 1. 結論サマリー",
         f"- Parallax状態: {state_label} ({parallax_state})",
         f"- 高注意資産: {', '.join(summary['high_attention_assets']) or 'なし'}",
+        "",
+        "## 本日の読みどころ",
+        "",
+    ]
+    lines += [f"{index}. {item}" for index, item in enumerate(_reading_highlights(report), start=1)]
+    lines += [
         "",
         "## 2. 市場天候の要約",
         f"- 主気団: {summary.get('dominant_market_regime') or '不明'}",
@@ -528,7 +563,23 @@ def write_parallax_outputs(report: Mapping[str, Any], output_dir: str | Path) ->
 def run_parallax(market_path: str | Path | None, audit_path: str | Path | None, output_dir: str | Path) -> dict[str, Path]:
     market, market_warnings = _load_json(market_path, MARKET_SCHEMA_VERSION)
     audit, audit_warnings = _load_json(audit_path, EL_SHADDAI_SCHEMA_VERSION)
-    return write_parallax_outputs(build_parallax_report(market, audit, warnings=market_warnings + audit_warnings), output_dir)
+    report = build_parallax_report(market, audit, warnings=market_warnings + audit_warnings)
+    paths = write_parallax_outputs(report, output_dir)
+    manifest_path = Path(output_dir) / "production_run_manifest.json"
+    base: dict[str, Any] = {}
+    if manifest_path.is_file():
+        try:
+            base = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, json.JSONDecodeError):
+            base = {}
+    previous_warnings = base.get("warnings", {})
+    if isinstance(previous_warnings, Mapping):
+        previous_warnings = previous_warnings.get("items", [])
+    write_manifest(
+        output_dir, market_path=market_path, audit_path=audit_path, parallax_path=paths["json"],
+        warnings=list(previous_warnings or []) + list(report.get("warnings", [])), base=base,
+    )
+    return paths
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -539,6 +590,8 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     for name, path in run_parallax(args.market_amedas, args.el_shaddai, args.output_dir).items():
         print(f"Wrote {name}: {path}")
+    manifest = json.loads((Path(args.output_dir) / "production_run_manifest.json").read_text(encoding="utf-8"))
+    print(render_quality_gate(manifest["quality_gate"], args.output_dir))
     return 0
 
 

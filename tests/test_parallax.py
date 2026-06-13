@@ -56,15 +56,26 @@ def test_cli_runner_reads_realistic_fixtures_and_tolerates_missing_file(tmp_path
     missing_paths = run_parallax(tmp_path / "missing.json", FIXTURES / "el_shaddai_lumus8_audit.json", tmp_path / "missing")
 
     assert set(paths) == {"json", "markdown"}
+    manifest = json.loads((tmp_path / "complete" / "production_run_manifest.json").read_text(encoding="utf-8"))
+    assert manifest["quality_gate"]["status"] == "fail"
+    assert manifest["inputs"]["parallax_report"]["schema_version"] == "parallax_context_report.v1"
     assert json.loads(paths["json"].read_text(encoding="utf-8"))["input_versions"] == {"market_amedas": "market_amedas_snapshot.v1", "el_shaddai": "el_shaddai_lumus8_audit.v1"}
     assert json.loads(missing_paths["json"].read_text(encoding="utf-8"))["summary"]["parallax_state"] == "insufficient_context"
 
 
-def test_markdown_has_all_required_sections():
+def test_markdown_has_all_required_sections_and_reading_highlights():
     market, audit = _inputs()
     markdown = render_markdown(build_parallax_report(market, audit))
     for number in range(1, 9):
         assert f"## {number}." in markdown
+    assert "## 本日の読みどころ" in markdown
+    assert "主気団は yield、副気団は growth" in markdown
+    assert "高注意資産は" in markdown
+    assert "BTC" in markdown and "市場文脈との乖離" in markdown
+    assert "DBC" in markdown and "市場文脈で説明可能" in markdown
+    forbidden = ["売却する", "買う", "追加投資する", "配分変更する", "撤退する", "ロスカットする"]
+    highlights = markdown.split("## 本日の読みどころ", 1)[1].split("## 2.", 1)[0]
+    assert not any(word in highlights for word in forbidden)
 
 
 def test_missing_major_market_fields_returns_insufficient_asset_context():

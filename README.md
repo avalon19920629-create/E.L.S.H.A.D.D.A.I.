@@ -718,3 +718,9 @@ os.environ["FRED_API_KEY"] = getpass("FRED_API_KEY: ")
 ```
 
 API キーを設定しない場合は、設定済みの既存 provider（既定値は keyless `pandas_datareader`）を使用します。live FRED 取得に失敗しても監査全体は停止せず、last-successful cache、続いて neutral TLT/TIP Role proxy の順に fallback します。neutral fallback が使用されると L.O.D.E. / I.N.F.E.R.N.O. adapter は degraded / failed として記録され、Parallax Engine の confidence が低下する可能性があります。出力は引き続き助言専用で、自動売買・自動売却には接続しません。
+
+### Production audit manifest / quality gate / 本日の読みどころ
+
+`production_run_manifest.json` は production 監査の表紙・証跡であり、Git provenance、入力 JSON とデータ状態、生成成果物、warning、助言専用の安全境界、quality gate を記録します。quality gate は `pass`（正常完了）、`warn`（成果物は利用可能だが warning 要確認）、`fail`（主要成果物・データ状態・安全境界のいずれかが未完了）です。Parallax runner の終了時にも同じ gate が表示されます。
+
+`parallax_context_report.md` 冒頭の「本日の読みどころ」は、dominant / secondary market regime と資産別 context を基にした確認優先度の短い要約です。売買・売却・追加投資・配分変更を指示するものではありません。
