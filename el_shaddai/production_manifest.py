@@ -86,12 +86,17 @@ def evaluate_quality_gate(
         status = "fail"
     elif warning_items or degraded:
         status = "warn"
+        if warning_items:
+            reasons.append(f"Non-fatal warnings are present: {len(warning_items)}")
+        if degraded:
+            reasons.append(f"degraded_adapters is not empty: {', '.join(map(str, degraded))}")
     else:
         status = "pass"
     return {
         "status": status,
         "label": QUALITY_LABELS[status],
         "reasons": reasons,
+        "warnings_count": len(warning_items),
         "checks": {
             "market_amedas": "OK" if market else "MISSING",
             "el_shaddai": "OK" if audit else "MISSING",
@@ -158,7 +163,6 @@ def build_manifest(
     market, audit, parallax = _read_json(market_path), _read_json(audit_path), _read_json(parallax_path)
     warning_items = list(dict.fromkeys(str(item) for item in warnings if item))
     gate = evaluate_quality_gate(market, audit, parallax, warnings=warning_items, safety=(parallax or {}).get("safety") or SAFETY_BOUNDARY)
-    gate["warnings_count"] = len(warning_items)
     generated = [
         {"name": path.name, "path": str(path.resolve()), "size_bytes": path.stat().st_size}
         for path in sorted(destination.glob("*")) if path.is_file() and path.name != "production_run_manifest.json"

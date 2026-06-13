@@ -72,6 +72,8 @@ def test_markdown_has_all_required_sections_and_reading_highlights():
     assert "主気団は yield、副気団は growth" in markdown
     assert "高注意資産は" in markdown
     assert "BTC" in markdown and "市場文脈との乖離" in markdown
+    assert "BTC / XLRE は市場文脈との乖離があり、優先的に確認する。" in markdown
+    assert "BTC / XLRE 市場文脈との乖離があり、優先的に確認する。" not in markdown
     assert "DBC" in markdown and "市場文脈で説明可能" in markdown
     forbidden = ["売却する", "買う", "追加投資する", "配分変更する", "撤退する", "ロスカットする"]
     highlights = markdown.split("## 本日の読みどころ", 1)[1].split("## 2.", 1)[0]
