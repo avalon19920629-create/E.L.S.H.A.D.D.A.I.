@@ -125,11 +125,26 @@ def _quality_inputs():
 
 def test_quality_gate_pass_warn_and_fail_rules():
     market, audit, parallax = _quality_inputs()
-    assert evaluate_quality_gate(market, audit, parallax)["status"] == "pass"
-    assert evaluate_quality_gate(market, audit, parallax, warnings=["known fallback"])["status"] == "warn"
+    passed = evaluate_quality_gate(market, audit, parallax)
+    assert passed["status"] == "pass"
+    assert passed["reasons"] == []
+    assert passed["warnings_count"] == 0
+
+    warned = evaluate_quality_gate(market, audit, parallax, warnings=["known fallback", "second warning"])
+    assert warned["status"] == "warn"
+    assert warned["reasons"] == ["Non-fatal warnings are present: 2"]
+    assert warned["warnings_count"] == 2
+
+    audit["audit_completeness"]["degraded_adapters"] = ["TIP"]
+    degraded = evaluate_quality_gate(market, audit, parallax)
+    assert degraded["status"] == "warn"
+    assert degraded["reasons"] == ["degraded_adapters is not empty: TIP"]
+    audit["audit_completeness"]["degraded_adapters"] = []
 
     audit["audit_completeness"]["failed_adapters"] = ["TLT"]
-    assert evaluate_quality_gate(market, audit, parallax)["status"] == "fail"
+    failed = evaluate_quality_gate(market, audit, parallax, warnings=["known fallback"])
+    assert failed["status"] == "fail"
+    assert failed["reasons"] == ["failed_adapters is not empty: TLT"]
     audit["audit_completeness"]["failed_adapters"] = []
     assert evaluate_quality_gate(None, audit, parallax)["status"] == "fail"
     broken_safety = {**SAFETY_BOUNDARY, "automatic_trading": True}

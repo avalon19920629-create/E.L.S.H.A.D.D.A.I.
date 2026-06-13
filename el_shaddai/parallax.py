@@ -485,7 +485,7 @@ def _reading_highlights(report: Mapping[str, Any]) -> list[str]:
     if high_attention:
         highlights.append(f"高注意資産は {' / '.join(map(str, high_attention))}。優先的に確認する。")
     categories = (
-        (summary.get("divergence_assets", []), "市場文脈との乖離があり、優先的に確認する。"),
+        (summary.get("divergence_assets", []), "は市場文脈との乖離があり、優先的に確認する。"),
         (summary.get("explained_weakness_assets", []), "の弱さは、市場文脈で説明可能。"),
         (summary.get("role_activation_absent_assets", []), "は役割発動局面ではなく、継続確認する。"),
     )
