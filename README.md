@@ -743,3 +743,19 @@ python -m el_shaddai.production_archive \
 推奨Drive保存先は `/content/drive/MyDrive/lumus8_production/YYYY-MM-DD/run_HHMMSS/` です。`latest/` は最後にarchiveした成果物の参照用コピー、`archive_index.json` はsafetyやmissing filesを含む完全な実行履歴、`archive_index.csv` はGoogle Sheets等で比較しやすい主要項目の表です。quality gate statusを継続保存することで、warning・adapter障害・データ品質の推移を改善分析できます。
 
 Google Driveが接続されていない場合、Drive配下への指定は `/content/lumus8_production/archive` へ自動fallbackします。Colabでは既存3セルの後に [`notebooks/production_control_notebook_v1.md`](notebooks/production_control_notebook_v1.md) の optional Cell 4 を実行できます。運用構造、missing files、破損index復旧、安全境界の確認方法は [`PRODUCTION_RUNBOOK.md`](PRODUCTION_RUNBOOK.md) を参照してください。
+
+## L.U.M.U.S.-8 History Lens v0.1
+
+History Lens は、Production Archive の `archive_index.json`（完全履歴）または `archive_index.csv`（主要項目）を読み、単発監査では見えにくい観測履歴を文脈化する補助ビューアです。quality gate、warning数、Parallax状態、市場regime、高注意資産、price/FRED/adapters、安全境界の履歴を集計します。Market Amedas、El Shaddai、Parallax Engine の判定ロジックを変更せず、投資判断や資産配分の変更を行う機能ではありません。
+
+```bash
+python -m el_shaddai.history_lens \
+  --archive-index /content/drive/MyDrive/lumus8_production/archive_index.json \
+  --output-dir /content/drive/MyDrive/lumus8_production/history_lens \
+  --recent-n 5 \
+  --format both
+```
+
+出力は `history_lens_report.json` と `history_lens_report.md` です。`--format` は `json` / `markdown` / `both` を選択できます。`persistent_recent` は、存在する直近N回のうち **N-1回以上**（1回しかない場合は1回）高注意資産として出現した資産です。実行履歴がN回未満なら、存在する回数を窓として計算します。空のindexからは `run_count = 0` のレポートを生成し、欠損項目とCSVでは取得できない安全境界詳細は `unknown` として扱います。
+
+Colabでは Production Archive を保存する Optional Cell 4 の後、Optional Cell 5 から `run_history_lens()` を実行して履歴を確認できます。

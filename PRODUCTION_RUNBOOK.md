@@ -191,3 +191,17 @@ python -m el_shaddai.production_archive \
 `/content/drive/MyDrive` が利用できない状態でDrive配下を指定した場合は、`/content/lumus8_production/archive` へ自動fallbackします。`latest/` は直近成果物の閲覧用であり、日付/時刻別フォルダが変更されない履歴です。`archive_index.json` / `archive_index.csv` は quality gate status、warning数、Parallax状態、データ状態、adapter状態、安全境界を実行ごとに蓄積し、履歴比較と改善分析に利用します。
 
 主要成果物の欠損や安全境界の不一致はarchiveを止めず、結果とindexに `warning` として明記します。破損したJSON indexは `.bak` へ退避してから新規indexを作ります。Archive結果が `warning` の場合は、`missing_files`、`archive_warnings`、`safety_ok` を確認してください。
+
+## History Lens v0.1（監査履歴の文脈化）
+
+Optional Cell 4 で Production Archive を更新した後、Optional Cell 5 で History Lens を実行します。History Lens は `archive_index.json` または `archive_index.csv` を読み、quality gate、warning数、Parallax状態、市場regime、高注意資産、データ取得、adapter、安全境界の継続状況を確認する補助ビューアです。監査判定や資産配分は変更しません。
+
+```bash
+python -m el_shaddai.history_lens \
+  --archive-index /content/drive/MyDrive/lumus8_production/archive_index.json \
+  --output-dir /content/drive/MyDrive/lumus8_production/history_lens \
+  --recent-n 5 \
+  --format both
+```
+
+`history_lens_report.json` は機械可読な集計、`history_lens_report.md` は人間向け履歴レポートです。`persistent_recent` は、存在する直近N回中N-1回以上（窓が1回なら1回）出現した高注意資産を示し、継続確認の対象を文脈化します。CSV indexには安全境界の完全情報がないため、その履歴は `unknown` になります。完全な安全境界履歴の確認にはJSON indexを使用してください。
