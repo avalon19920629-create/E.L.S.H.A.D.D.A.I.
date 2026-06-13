@@ -146,7 +146,7 @@ def _input_summary(path: str | Path | None, payload: Mapping[str, Any] | None, k
             summary[key] = completeness.get(key)
     else:
         report_summary = payload.get("summary", {})
-        summary.update({"report_version": payload.get("engine_version"), "parallax_state": report_summary.get("parallax_state"), "high_attention_assets": report_summary.get("high_attention_assets", [])})
+        summary.update({"report_version": payload.get("engine_version"), "parallax_state": report_summary.get("parallax_state"), "dominant_market_regime": report_summary.get("dominant_market_regime"), "secondary_market_regime": report_summary.get("secondary_market_regime"), "high_attention_assets": report_summary.get("high_attention_assets", [])})
     return summary
 
 

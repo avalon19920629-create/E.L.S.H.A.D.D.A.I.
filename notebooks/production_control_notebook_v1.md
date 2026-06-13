@@ -214,21 +214,26 @@ if quality_gate.get("status") == "warn":
 
 from IPython.display import Markdown, display
 display(Markdown((OUTPUT_DIR / "parallax_context_report.md").read_text(encoding="utf-8")))
+```
 
-# Optional: 必要な実行時だけ呼び出す。Driveがmount済みでなければ通常OUTPUT_DIRだけで完了する。
-def copy_artifacts_to_google_drive():
-    from google.colab import drive
-    drive.mount("/content/drive")
-    drive_dir = Path("/content/drive/MyDrive/lumus8_production") / RUN_DATE
-    drive_dir.mkdir(parents=True, exist_ok=True)
-    for source in OUTPUT_DIR.iterdir():
-        destination = drive_dir / source.name
-        if source.is_dir():
-            shutil.copytree(source, destination, dirs_exist_ok=True)
-        else:
-            shutil.copy2(source, destination)
-    print(f"Copied artifacts to: {drive_dir}")
-    return drive_dir
+## Optional Cell 4: Production Archive / Google Drive保存
 
-# DRIVE_OUTPUT_DIR = copy_artifacts_to_google_drive()
+quality gate確認後に実行する任意セルです。Driveをmountすると日付/実行時刻別履歴、`latest/`、JSON/CSV indexをDriveへ保存します。Driveをmountしない場合やmount先が利用できない場合は、自動的に `/content/lumus8_production/archive` へ保存します。Archiveは監査証跡の保存だけを行い、判定・スコア・売買・配分を変更しません。
+
+```python
+# Drive保存を使う場合だけ次の2行を有効化する。
+# from google.colab import drive
+# drive.mount("/content/drive")
+
+import sys
+sys.path.insert(0, str(EL_SHADDAI_REPO))
+
+from el_shaddai.production_archive import archive_production_run
+
+archive_result = archive_production_run(
+    output_dir=OUTPUT_DIR,
+    archive_root="/content/drive/MyDrive/lumus8_production",
+    update_latest=True,
+)
+archive_result
 ```

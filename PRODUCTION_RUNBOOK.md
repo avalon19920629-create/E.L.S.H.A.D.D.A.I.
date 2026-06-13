@@ -165,4 +165,29 @@ allocation_change: false
 
 ### 6.4 Google Drive保存（オプション）
 
-標準出力先は `/content/lumus8_production/artifacts/YYYY-MM-DD/` です。Drive保存が必要な場合だけ、Cell 3末尾の `copy_artifacts_to_google_drive()` を呼び出すと、mount後に `/content/drive/MyDrive/lumus8_production/YYYY-MM-DD/` へ成果物をコピーします。Driveをmountしなくても三層監査は完了します。
+標準出力先は `/content/lumus8_production/artifacts/YYYY-MM-DD/` です。Drive保存またはlocal archiveへの履歴保存が必要な場合だけ、三層監査とquality gate確認後に optional Cell 4 の `archive_production_run()` を実行します。Driveをmountしなくても三層監査とlocal archiveは完了します。
+
+## Production Archive v1.0（監査証跡の継続保存）
+
+Production Archive は、Market Amedas → El Shaddai → Parallax Engine の実行後に、`OUTPUT_DIR` の成果物を履歴として保存・索引化する仕組みです。投資判断、スコアリング、気団計算、監査判定、context判定を変更せず、自動売買・自動売却・配分変更にも接続しません。
+
+Google Driveをmount済みの場合の推奨構造は次のとおりです。同日複数回の実行は `run_HHMMSS`（衝突時は連番suffix）で分離されます。
+
+```text
+/content/drive/MyDrive/lumus8_production/
+├── YYYY-MM-DD/run_HHMMSS/   # 変更しない実行時点の監査証跡
+├── latest/                  # 最後にarchiveした成果物一式
+├── archive_index.json       # 完全な履歴・safety・missing files
+└── archive_index.csv        # Google Sheets等で比較しやすい主要列
+```
+
+```bash
+python -m el_shaddai.production_archive \
+  --output-dir /content/lumus8_production/artifacts/2026-06-13 \
+  --archive-root /content/drive/MyDrive/lumus8_production \
+  --update-latest
+```
+
+`/content/drive/MyDrive` が利用できない状態でDrive配下を指定した場合は、`/content/lumus8_production/archive` へ自動fallbackします。`latest/` は直近成果物の閲覧用であり、日付/時刻別フォルダが変更されない履歴です。`archive_index.json` / `archive_index.csv` は quality gate status、warning数、Parallax状態、データ状態、adapter状態、安全境界を実行ごとに蓄積し、履歴比較と改善分析に利用します。
+
+主要成果物の欠損や安全境界の不一致はarchiveを止めず、結果とindexに `warning` として明記します。破損したJSON indexは `.bak` へ退避してから新規indexを作ります。Archive結果が `warning` の場合は、`missing_files`、`archive_warnings`、`safety_ok` を確認してください。
