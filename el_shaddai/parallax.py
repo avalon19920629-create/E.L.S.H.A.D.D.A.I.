@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 SCHEMA_VERSION = "parallax_context_report.v1"
-ENGINE_VERSION = "0.1.1"
+ENGINE_VERSION = "0.1.2"
 MARKET_SCHEMA_VERSION = "market_amedas_snapshot.v1"
 EL_SHADDAI_SCHEMA_VERSION = "el_shaddai_lumus8_audit.v1"
 SAFETY_NOTICE = "本レポートはMarket AmedasとEl Shaddaiの出力を照合する補助診断であり、自動売買・自動売却・配分変更を意味しない。"
@@ -26,6 +26,40 @@ ASSET_MAP = {
 }
 SEVERITIES = ["low", "medium", "high", "critical"]
 CONFIDENCES = ["low", "medium", "high"]
+
+CONTEXT_DISPLAY_LABELS = {
+    "context_supported": "文脈整合",
+    "context_explained_weakness": "弱さは文脈で説明可能",
+    "context_divergence": "文脈乖離",
+    "role_activation_absent": "役割発動局面ではない",
+    "role_failure_candidate": "役割不全候補",
+    "insufficient_context": "文脈不足",
+}
+SEVERITY_DISPLAY_LABELS = {
+    "critical": "最重要確認",
+    "high": "重点確認",
+    "medium": "通常確認",
+    "low": "参考確認",
+}
+CONFIDENCE_DISPLAY_LABELS = {"high": "高", "medium": "中", "low": "低"}
+PARALLAX_STATE_DISPLAY_LABELS = {
+    "context_mixed": "文脈混在",
+    "context_supported": "文脈整合",
+    "context_aligned": "文脈整合",
+    "context_divergent": "文脈乖離優勢",
+    "insufficient_context": "文脈不足",
+}
+WARNING_DISPLAY_LABELS = {
+    "warning: O.R.A.C.L.E. live mode uses price/VIX only": "O.R.A.C.L.E.簡易モード",
+    "warning: O.R.A.C.L.E. VT value inputs unavailable": "O.R.A.C.L.E. VT中立fallback",
+    "warning: O.R.A.C.L.E. BTC value inputs unavailable": "O.R.A.C.L.E. BTC中立fallback",
+    "warning: O.R.A.C.L.E. BTC sentiment inputs unavailable": "O.R.A.C.L.E. BTC sentiment中立fallback",
+    "warning: O.R.A.C.L.E. BTC cycle inputs unavailable": "O.R.A.C.L.E. BTC cycle中立fallback",
+    "warning: I.N.F.E.R.N.O. severe penalty proxy detected: real_rate_shock": "I.N.F.E.R.N.O.実質金利ショックproxy",
+    "warning: I.N.F.E.R.N.O. severe penalty proxy detected: macro_submission": "I.N.F.E.R.N.O.マクロ従属proxy",
+    "inflation_air_mass_negative": "インフレ気団マイナス",
+    "btc_downdraft_under_risk_on_sensor": "BTCリスクオン下の下降流",
+}
 
 
 def _load_json(path: str | Path | None, expected_schema: str) -> tuple[dict[str, Any] | None, list[str]]:
@@ -421,16 +455,62 @@ def build_parallax_report(market: Mapping[str, Any] | None, audit: Mapping[str, 
     }
 
 
+def _display_label(value: Any, labels: Mapping[str, str]) -> str:
+    raw = str(value)
+    return labels.get(raw, raw)
+
+
+def _warning_display_label(warning: Any) -> str:
+    raw = str(warning)
+    for prefix, label in WARNING_DISPLAY_LABELS.items():
+        if raw.startswith(prefix):
+            return label
+    return raw
+
+
 def render_markdown(report: Mapping[str, Any]) -> str:
     summary, status = report["summary"], report["data_status"]
-    lines = [f"# Parallax Context Report v{ENGINE_VERSION}", "", "## 1. 結論サマリー", f"- Parallax状態: {summary['parallax_state']}", f"- 高注意資産: {', '.join(summary['high_attention_assets']) or 'なし'}", "", "## 2. 市場天候の要約", f"- 主気団: {summary.get('dominant_market_regime') or '不明'}", f"- 副気団: {summary.get('secondary_market_regime') or '不明'}", f"- Market Amedas入力: {'あり' if status['market_amedas_available'] else 'なし'}", "", "## 3. El Shaddai状態の要約", f"- 全体状態: {summary.get('el_shaddai_state') or '不明'}", f"- El Shaddai入力: {'あり' if status['el_shaddai_available'] else 'なし'}", "", "## 4. 資産別Parallax判定", "| Asset | Context | Severity | Confidence | Interpretation |", "| --- | --- | --- | --- | --- |"]
+    parallax_state = str(summary["parallax_state"])
+    state_label = _display_label(parallax_state, PARALLAX_STATE_DISPLAY_LABELS)
+    lines = [
+        f"# Parallax Context Report v{ENGINE_VERSION}",
+        "",
+        "## 1. 結論サマリー",
+        f"- Parallax状態: {state_label} ({parallax_state})",
+        f"- 高注意資産: {', '.join(summary['high_attention_assets']) or 'なし'}",
+        "",
+        "## 2. 市場天候の要約",
+        f"- 主気団: {summary.get('dominant_market_regime') or '不明'}",
+        f"- 副気団: {summary.get('secondary_market_regime') or '不明'}",
+        f"- Market Amedas入力: {'あり' if status['market_amedas_available'] else 'なし'}",
+        "",
+        "## 3. El Shaddai状態の要約",
+        f"- 全体状態: {summary.get('el_shaddai_state') or '不明'}",
+        f"- El Shaddai入力: {'あり' if status['el_shaddai_available'] else 'なし'}",
+        "",
+        "## 4. 資産別Parallax判定",
+        "| Asset | 文脈判定 | 確認優先度 | 判定信頼度 | 解釈 |",
+        "| --- | --- | --- | --- | --- |",
+    ]
     for item in report["asset_contexts"]:
-        lines.append(f"| {item['asset']} | {item['context_label']} | {item['severity']} | {item['confidence']} | {item['interpretation']} |")
-    lines += ["", "## 5. 役割グループ別Parallax判定"]
+        context = _display_label(item["context_label"], CONTEXT_DISPLAY_LABELS)
+        priority = _display_label(item["severity"], SEVERITY_DISPLAY_LABELS)
+        confidence = _display_label(item["confidence"], CONFIDENCE_DISPLAY_LABELS)
+        lines.append(f"| {item['asset']} | {context} | {priority} | {confidence} | {item['interpretation']} |")
+    lines += [
+        "",
+        "注：確認優先度は売買判断・売却判断・配分変更判断ではありません。  ",
+        "Parallax Engineにおける「市場文脈と資産状態の照合上、どれを優先的に確認すべきか」を示します。",
+        "",
+        "## 5. 役割グループ別Parallax判定",
+    ]
     for key, group in report["group_contexts"].items():
-        warning_note = f" / 関連warning: {', '.join(group.get('warnings', []))}" if group.get("warnings") else ""
-        lines.append(f"- {group['label']} ({key}): {', '.join(group['context_labels']) or '判定なし'}{warning_note}")
-    lines += ["", "## 6. 注意点"] + [f"- {item}" for item in report["warnings"] or ["特記事項なし"]]
+        labels = [_display_label(label, CONTEXT_DISPLAY_LABELS) for label in group["context_labels"]]
+        warnings = [_warning_display_label(warning) for warning in group.get("warnings", [])]
+        warning_note = f" / 関連warning: {', '.join(warnings)}" if warnings else ""
+        lines.append(f"- {group['label']} ({key}): {', '.join(labels) or '判定なし'}{warning_note}")
+    warning_lines = [_warning_display_label(item) for item in report["warnings"]] or ["特記事項なし"]
+    lines += ["", "## 6. 注意点"] + [f"- {item}" for item in warning_lines]
     lines += ["", "## 7. 次回確認項目"] + [f"- {item}" for item in report["next_check_items"] or ["不足入力と高注意資産を次回監査で確認する。"]]
     lines += ["", "## 8. 安全境界", f"- {SAFETY_NOTICE}", "- スコア、気団比率、負傷分類を書き換えない。", "- 予測リターンの断定や投資助言としての売買推奨を行わない。", ""]
     return "\n".join(lines)
