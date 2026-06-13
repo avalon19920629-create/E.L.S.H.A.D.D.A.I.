@@ -59,6 +59,8 @@ def test_cli_runner_reads_realistic_fixtures_and_tolerates_missing_file(tmp_path
     manifest = json.loads((tmp_path / "complete" / "production_run_manifest.json").read_text(encoding="utf-8"))
     assert manifest["quality_gate"]["status"] == "fail"
     assert manifest["inputs"]["parallax_report"]["schema_version"] == "parallax_context_report.v1"
+    assert manifest["inputs"]["parallax_report"]["dominant_market_regime"] == "yield"
+    assert manifest["inputs"]["parallax_report"]["secondary_market_regime"] == "growth"
     assert json.loads(paths["json"].read_text(encoding="utf-8"))["input_versions"] == {"market_amedas": "market_amedas_snapshot.v1", "el_shaddai": "el_shaddai_lumus8_audit.v1"}
     assert json.loads(missing_paths["json"].read_text(encoding="utf-8"))["summary"]["parallax_state"] == "insufficient_context"
 
