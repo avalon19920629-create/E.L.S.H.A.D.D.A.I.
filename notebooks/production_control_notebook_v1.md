@@ -237,3 +237,22 @@ archive_result = archive_production_run(
 )
 archive_result
 ```
+
+## Optional Cell 5: L.U.M.U.S.-8 History Lens / 監査履歴確認
+
+Optional Cell 4でArchiveを保存した後に実行する任意セルです。蓄積された監査ログを集計し、観測履歴を文脈化します。監査判定や資産配分を変更するセルではありません。
+
+```python
+from el_shaddai.history_lens import run_history_lens, render_cli_summary
+
+history_result = run_history_lens(
+    archive_index="/content/drive/MyDrive/lumus8_production/archive_index.json",
+    output_dir="/content/drive/MyDrive/lumus8_production/history_lens",
+    recent_n=5,
+    output_format="both",
+)
+print(render_cli_summary(history_result))
+history_result["report"]
+```
+
+`history_lens_report.json` と `history_lens_report.md` が出力されます。`persistent_recent` は、存在する直近N回中N-1回以上（1回のみなら1回）で継続的に出現した高注意資産です。
