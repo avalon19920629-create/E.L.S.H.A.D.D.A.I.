@@ -677,7 +677,7 @@ python run_el_shaddai_production.py \
 
 設定例は `configs/production_lumus8.yaml`、Google Driveのmountを含むColab手順、生成物、警告確認、障害時の扱いは [`PRODUCTION_RUNBOOK.md`](PRODUCTION_RUNBOOK.md) を参照してください。この入口は自動売買・注文執行・常時監視を行いません。
 
-## Parallax Engine v0.1.1
+## Parallax Engine v0.1.2
 
 Parallax Engine は、Market Amedas の市場天候 JSON と El Shaddai の L.U.M.U.S.-8 監査 JSON を照合し、資産状態が市場文脈に支持されるか、説明可能な弱さか、乖離または役割不全候補かをルールベースで分類します。入力側のスコア、気団比率、負傷分類は変更せず、自動売買や配分変更も行いません。
 
@@ -689,6 +689,8 @@ python run_parallax.py \
 ```
 
 出力は `parallax_context_report.json` と `parallax_context_report.md` です。どちらかの入力ファイルが欠損していても処理は停止せず、利用可能な範囲で `insufficient_context` レポートを生成します。
+
+v0.1.2 の Markdown では、内部 `severity` を「確認優先度」として日本語表示します。`critical` は「最重要確認」と表示されますが、これは売買判断・売却判断・配分変更判断ではありません。JSON の `context_label` / `severity` / `confidence` は機械可読な内部値を維持します。
 
 v0.1.1 では confidence を資産別の `relevant_warnings` に基づいて判定します。O.R.A.C.L.E. の neutral fallback warning は主に VT/BTC、I.N.F.E.R.N.O. の severe penalty warning は主に TIP、Market Amedas の BTC warning は BTC、inflation warning は TIP/DBC/GLDM に影響します。入力欠損、schema 不正、price/FRED status の NG、空でない `failed_adapters` などのグローバル重大障害だけが全資産を low にします。`fred_data_status: OK` かつ degraded/failed adapters が空の場合、FRED 理由だけで TLT/TIP/BNDX を low にしません。
 

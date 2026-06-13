@@ -224,3 +224,45 @@ def test_global_failure_still_lowers_every_asset():
 
     assert report["global_critical_warnings"]
     assert all(item["confidence"] == "low" for item in report["asset_contexts"])
+
+
+def test_markdown_v012_uses_human_readable_labels_without_changing_json_values():
+    market, audit = _inputs()
+    report = build_parallax_report(market, audit)
+    context = report["asset_contexts"][0]
+    context.update({"context_label": "context_divergence", "severity": "critical", "confidence": "low"})
+    report["asset_contexts"][1].update({"severity": "high", "confidence": "high"})
+    report["asset_contexts"][2].update({"severity": "medium", "confidence": "medium"})
+    report["asset_contexts"][3].update({"severity": "low", "confidence": "high"})
+
+    markdown = render_markdown(report)
+    asset_table = markdown.split("## 4. 資産別Parallax判定", 1)[1].split("## 5.", 1)[0]
+
+    assert markdown.startswith("# Parallax Context Report v0.1.2")
+    assert "Parallax状態: 文脈混在 (context_mixed)" in markdown
+    assert "| Asset | 文脈判定 | 確認優先度 | 判定信頼度 | 解釈 |" in asset_table
+    assert "| 文脈乖離 | 最重要確認 | 低 |" in asset_table
+    assert "重点確認" in asset_table
+    assert "通常確認" in asset_table
+    assert "参考確認" in asset_table
+    assert "高" in asset_table
+    assert "中" in asset_table
+    assert not any(value in asset_table for value in ("critical", "high", "medium", "low"))
+    assert "確認優先度は売買判断・売却判断・配分変更判断ではありません" in asset_table
+    assert context["context_label"] == "context_divergence"
+    assert context["severity"] == "critical"
+    assert context["confidence"] == "low"
+
+
+def test_markdown_summarizes_known_warnings_without_changing_json_warnings():
+    market, audit = _inputs()
+    warning = "warning: O.R.A.C.L.E. BTC sentiment inputs unavailable; neutral 50 fallback applied."
+    audit["warnings"] = [warning]
+    report = build_parallax_report(market, audit)
+
+    markdown = render_markdown(report)
+
+    assert "O.R.A.C.L.E. BTC sentiment中立fallback" in markdown
+    assert warning not in markdown
+    assert warning in report["warnings"]
+    assert warning in next(item for item in report["asset_contexts"] if item["asset"] == "BTC")["relevant_warnings"]

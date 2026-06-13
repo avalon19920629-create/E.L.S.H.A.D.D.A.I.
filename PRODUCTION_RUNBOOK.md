@@ -98,4 +98,6 @@ Without a key, production preserves the provider configured under `fred` in `con
 
 The fallback order is live FRED, last-successful cache, then neutral proxy. Warnings identify the failed live provider. Cache-backed results are reported with `source=cache`, `degraded=true`, and `stale_days`; neutral results are also marked degraded and appear in manifest `failed_adapters`, which may reduce downstream Parallax confidence. No automatic trading, automatic selling, or continuous monitoring is performed.
 
+Parallax Engine v0.1.2 renders internal `severity` values as Japanese confirmation-priority labels in Markdown. `critical` is displayed as `最重要確認`, but this is not a trading, selling, or allocation-change decision. JSON keeps the machine-readable `context_label`, `severity`, and `confidence` values unchanged.
+
 Parallax Engine v0.1.1 scopes non-critical warnings through each asset context’s `relevant_warnings`: O.R.A.C.L.E. warnings primarily qualify VT/BTC confidence, I.N.F.E.R.N.O. severe-penalty warnings primarily qualify TIP, and Market Amedas BTC/inflation warnings qualify their related assets. Only global critical input failures, including an NG FRED/price status or non-empty `failed_adapters`, reduce every asset to low confidence. A successful `fredapi` result with empty degraded/failed adapter lists does not lower TLT/TIP/BNDX solely for FRED reasons.
